@@ -1,0 +1,235 @@
+### 1 创建项目
+
+名称ExamSystem 路径S:\QT
+
+下载64位MySQL ODBC驱动
+官网下载MySQL ODBC 9.3 Unicode Driver
+
+添加头文件database.h
+///
+#ifndef DATABASE_H
+#define DATABASE_H
+
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QDebug>
+
+class Database
+{
+public:
+    Database();
+    bool connectToDatabase();
+    void createTables();
+    void closeDatabase();
+
+private:
+    QSqlDatabase db;
+};
+
+#endif // DATABASE_H
+
+///
+
+
+添加源文件database.cpp
+///
+#include "database.h"
+
+Database::Database()
+{
+}
+
+bool Database::connectToDatabase()
+{
+    db = QSqlDatabase::addDatabase("QODBC");
+
+    // 使用正确的64位驱动名称
+    QStringList driverNames = {
+        "MySQL ODBC 9.3 Unicode Driver",
+        "MySQL ODBC 9.3 ANSI Driver"
+    };
+
+    bool connected = false;
+    for (const QString &driverName : driverNames) {
+        QString connectionString = QString("DRIVER={%1};"
+                                           "SERVER=localhost;"
+                                           "DATABASE=exam_system;"
+                                           "UID=root;"
+                                           "PWD=Zy202312138;"
+                                           "PORT=3306;").arg(driverName);
+
+        db.setDatabaseName(connectionString);
+
+        if (db.open()) {
+            qDebug() << "数据库连接成功! 使用驱动:" << driverName;
+            connected = true;
+            break;
+        } else {
+            qDebug() << "尝试驱动" << driverName << "失败:" << db.lastError().text();
+        }
+    }
+
+    if (!connected) {
+        qDebug() << "所有驱动尝试失败";
+        return false;
+    }
+
+    return true;
+}
+
+void Database::createTables()
+{
+    QSqlQuery query;
+
+    QString createUsersTable =
+        "CREATE TABLE IF NOT EXISTS users ("
+        "id INT AUTO_INCREMENT PRIMARY KEY,"
+        "username VARCHAR(50) UNIQUE NOT NULL,"
+        "password VARCHAR(255) NOT NULL,"
+        "role ENUM('student', 'teacher', 'admin') DEFAULT 'student',"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        ")";
+
+    if (!query.exec(createUsersTable)) {
+        qDebug() << "创建用户表失败:" << query.lastError().text();
+    } else {
+        qDebug() << "用户表创建成功";
+    }
+}
+
+void Database::closeDatabase()
+{
+    if (db.isOpen()) {
+        db.close();
+    }
+}
+
+///
+
+
+main.cpp
+///
+#include "mainwindow.h"
+#include "database.h"
+#include <QApplication>
+#include <QDebug>
+#include <QSqlDatabase>
+
+int main(int argc, char *argv[])
+{
+    QApplication a(argc, argv);
+
+    // 检查可用驱动
+    QStringList drivers = QSqlDatabase::drivers();
+    qDebug() << "可用驱动:" << drivers;
+
+    // 测试数据库连接
+    Database database;
+    if (database.connectToDatabase()) {
+        qDebug() << "开始创建数据库表...";
+        database.createTables();
+    } else {
+        qDebug() << "数据库连接失败，程序继续运行";
+    }
+
+    MainWindow w;
+    w.show();
+
+    return a.exec();
+}
+
+///
+
+CMakeLists.txt
+///
+cmake_minimum_required(VERSION 3.16)
+
+project(ExamSystem VERSION 0.1 LANGUAGES CXX)
+
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql)
+
+set(PROJECT_SOURCES
+        main.cpp
+        mainwindow.cpp
+        mainwindow.h
+        mainwindow.ui
+        database.h
+        database.cpp
+)
+
+if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
+    qt_add_executable(ExamSystem
+        MANUAL_FINALIZATION
+        ${PROJECT_SOURCES}
+        database.h
+        database.cpp
+    )
+else()
+    if(ANDROID)
+        add_library(ExamSystem SHARED
+            ${PROJECT_SOURCES}
+        )
+    else()
+        add_executable(ExamSystem
+            ${PROJECT_SOURCES}
+        )
+    endif()
+endif()
+
+target_link_libraries(ExamSystem PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Sql)
+
+if(${QT_VERSION} VERSION_LESS 6.1.0)
+  set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.ExamSystem)
+endif()
+set_target_properties(ExamSystem PROPERTIES
+    ${BUNDLE_ID_OPTION}
+    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    MACOSX_BUNDLE TRUE
+    WIN32_EXECUTABLE TRUE
+)
+
+include(GNUInstallDirs)
+install(TARGETS ExamSystem
+    BUNDLE DESTINATION .
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+if(QT_VERSION_MAJOR EQUAL 6)
+    qt_finalize_executable(ExamSystem)
+endif()
+
+///
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
