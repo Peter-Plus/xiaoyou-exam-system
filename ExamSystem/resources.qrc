@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/gif">
+        <file>movie.gif</file>
+    </qresource>
+    <qresource prefix="/photos">
+        <file>good.png</file>
+    </qresource>
+</RCC>

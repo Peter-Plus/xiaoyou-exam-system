@@ -1,0 +1,218 @@
+<svg viewBox="0 0 1400 1000" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="1400" height="1000" fill="#f8f9fa"/>
+  
+  <!-- 标题 -->
+  <text x="700" y="40" text-anchor="middle" font-size="28" font-weight="bold" fill="#2c3e50">在线考试系统架构图</text>
+  
+  <!-- 用户层 -->
+  <g id="user-layer">
+    <rect x="50" y="80" width="1300" height="120" fill="#e3f2fd" stroke="#1976d2" stroke-width="2" rx="10"/>
+    <text x="700" y="110" text-anchor="middle" font-size="20" font-weight="bold" fill="#1976d2">用户层</text>
+    
+    <!-- 学生 -->
+    <rect x="200" y="130" width="200" height="50" fill="#bbdefb" stroke="#1976d2" stroke-width="1" rx="5"/>
+    <text x="300" y="160" text-anchor="middle" font-size="16" fill="#0d47a1">学生用户</text>
+    
+    <!-- 教师 -->
+    <rect x="600" y="130" width="200" height="50" fill="#bbdefb" stroke="#1976d2" stroke-width="1" rx="5"/>
+    <text x="700" y="160" text-anchor="middle" font-size="16" fill="#0d47a1">教师用户</text>
+    
+    <!-- 管理员 -->
+    <rect x="1000" y="130" width="200" height="50" fill="#bbdefb" stroke="#1976d2" stroke-width="1" rx="5"/>
+    <text x="1100" y="160" text-anchor="middle" font-size="16" fill="#0d47a1">管理员（预留）</text>
+  </g>
+  
+  <!-- 表示层 -->
+  <g id="presentation-layer">
+    <rect x="50" y="230" width="1300" height="200" fill="#e8f5e9" stroke="#4caf50" stroke-width="2" rx="10"/>
+    <text x="700" y="260" text-anchor="middle" font-size="20" font-weight="bold" fill="#2e7d32">表示层 (Qt UI)</text>
+    
+    <!-- 登录注册模块 -->
+    <rect x="100" y="290" width="180" height="120" fill="#c8e6c9" stroke="#4caf50" stroke-width="1" rx="5"/>
+    <text x="190" y="315" text-anchor="middle" font-size="14" font-weight="bold" fill="#1b5e20">登录注册模块</text>
+    <text x="190" y="335" text-anchor="middle" font-size="12" fill="#2e7d32">LoginWindow</text>
+    <text x="190" y="350" text-anchor="middle" font-size="12" fill="#2e7d32">RegisterWindow</text>
+    
+    <!-- 学生主界面 -->
+    <rect x="320" y="290" width="180" height="120" fill="#c8e6c9" stroke="#4caf50" stroke-width="1" rx="5"/>
+    <text x="410" y="315" text-anchor="middle" font-size="14" font-weight="bold" fill="#1b5e20">学生主界面</text>
+    <text x="410" y="335" text-anchor="middle" font-size="12" fill="#2e7d32">StudentMainWindow</text>
+    <text x="410" y="350" text-anchor="middle" font-size="12" fill="#2e7d32">StudentExamList</text>
+    <text x="410" y="365" text-anchor="middle" font-size="12" fill="#2e7d32">ExamTaking</text>
+    <text x="410" y="380" text-anchor="middle" font-size="12" fill="#2e7d32">ExamResult</text>
+    
+    <!-- 教师主界面 -->
+    <rect x="540" y="290" width="180" height="120" fill="#c8e6c9" stroke="#4caf50" stroke-width="1" rx="5"/>
+    <text x="630" y="315" text-anchor="middle" font-size="14" font-weight="bold" fill="#1b5e20">教师主界面</text>
+    <text x="630" y="335" text-anchor="middle" font-size="12" fill="#2e7d32">TeacherMainWindow</text>
+    <text x="630" y="350" text-anchor="middle" font-size="12" fill="#2e7d32">QuestionManager</text>
+    <text x="630" y="365" text-anchor="middle" font-size="12" fill="#2e7d32">ExamManager</text>
+    <text x="630" y="380" text-anchor="middle" font-size="12" fill="#2e7d32">ExamGrading</text>
+    <text x="630" y="395" text-anchor="middle" font-size="12" fill="#2e7d32">ClassStatistics</text>
+    
+    <!-- 题库管理 -->
+    <rect x="760" y="290" width="180" height="120" fill="#c8e6c9" stroke="#4caf50" stroke-width="1" rx="5"/>
+    <text x="850" y="315" text-anchor="middle" font-size="14" font-weight="bold" fill="#1b5e20">题库管理</text>
+    <text x="850" y="335" text-anchor="middle" font-size="12" fill="#2e7d32">QuestionDialog</text>
+    <text x="850" y="350" text-anchor="middle" font-size="12" fill="#2e7d32">题目增删改查</text>
+    <text x="850" y="365" text-anchor="middle" font-size="12" fill="#2e7d32">题目收藏</text>
+    
+    <!-- 考试管理 -->
+    <rect x="980" y="290" width="180" height="120" fill="#c8e6c9" stroke="#4caf50" stroke-width="1" rx="5"/>
+    <text x="1070" y="315" text-anchor="middle" font-size="14" font-weight="bold" fill="#1b5e20">考试管理</text>
+    <text x="1070" y="335" text-anchor="middle" font-size="12" fill="#2e7d32">ExamDialog</text>
+    <text x="1070" y="350" text-anchor="middle" font-size="12" fill="#2e7d32">PaperComposer</text>
+    <text x="1070" y="365" text-anchor="middle" font-size="12" fill="#2e7d32">PaperPreview</text>
+    <text x="1070" y="380" text-anchor="middle" font-size="12" fill="#2e7d32">PermissionDialog</text>
+    
+    <!-- 其他组件 -->
+    <rect x="1200" y="290" width="120" height="120" fill="#c8e6c9" stroke="#4caf50" stroke-width="1" rx="5"/>
+    <text x="1260" y="315" text-anchor="middle" font-size="14" font-weight="bold" fill="#1b5e20">辅助组件</text>
+    <text x="1260" y="335" text-anchor="middle" font-size="12" fill="#2e7d32">AppController</text>
+    <text x="1260" y="350" text-anchor="middle" font-size="12" fill="#2e7d32">ExamStatusMgr</text>
+  </g>
+  
+  <!-- 业务逻辑层 -->
+  <g id="business-layer">
+    <rect x="50" y="460" width="1300" height="180" fill="#fff3e0" stroke="#ff9800" stroke-width="2" rx="10"/>
+    <text x="700" y="490" text-anchor="middle" font-size="20" font-weight="bold" fill="#e65100">业务逻辑层</text>
+    
+    <!-- 实体类 -->
+    <rect x="100" y="520" width="300" height="100" fill="#ffe0b2" stroke="#ff9800" stroke-width="1" rx="5"/>
+    <text x="250" y="545" text-anchor="middle" font-size="14" font-weight="bold" fill="#bf360c">实体类</text>
+    <text x="150" y="565" text-anchor="start" font-size="12" fill="#e65100">• User (Student/Teacher)</text>
+    <text x="150" y="580" text-anchor="start" font-size="12" fill="#e65100">• Question</text>
+    <text x="150" y="595" text-anchor="start" font-size="12" fill="#e65100">• Exam / Course</text>
+    <text x="150" y="610" text-anchor="start" font-size="12" fill="#e65100">• StudentAnswer / ClassStatistics</text>
+    
+    <!-- 业务逻辑 -->
+    <rect x="450" y="520" width="450" height="100" fill="#ffe0b2" stroke="#ff9800" stroke-width="1" rx="5"/>
+    <text x="675" y="545" text-anchor="middle" font-size="14" font-weight="bold" fill="#bf360c">核心业务逻辑</text>
+    <text x="480" y="565" text-anchor="start" font-size="12" fill="#e65100">• 用户认证与权限管理</text>
+    <text x="480" y="580" text-anchor="start" font-size="12" fill="#e65100">• 题库管理（CRUD、收藏、权限控制）</text>
+    <text x="480" y="595" text-anchor="start" font-size="12" fill="#e65100">• 考试管理（创建、组卷、发布、状态管理）</text>
+    <text x="480" y="610" text-anchor="start" font-size="12" fill="#e65100">• 自动批改算法 / 成绩统计分析</text>
+    
+    <!-- 辅助功能 -->
+    <rect x="950" y="520" width="350" height="100" fill="#ffe0b2" stroke="#ff9800" stroke-width="1" rx="5"/>
+    <text x="1125" y="545" text-anchor="middle" font-size="14" font-weight="bold" fill="#bf360c">辅助功能</text>
+    <text x="970" y="565" text-anchor="start" font-size="12" fill="#e65100">• 密码加密（SHA-256）</text>
+    <text x="970" y="580" text-anchor="start" font-size="12" fill="#e65100">• 状态自动管理（定时器）</text>
+    <text x="970" y="595" text-anchor="start" font-size="12" fill="#e65100">• Excel导出功能</text>
+    <text x="970" y="610" text-anchor="start" font-size="12" fill="#e65100">• 试卷打印预览</text>
+  </g>
+  
+  <!-- 数据访问层 -->
+  <g id="data-layer">
+    <rect x="50" y="670" width="1300" height="120" fill="#fce4ec" stroke="#e91e63" stroke-width="2" rx="10"/>
+    <text x="700" y="700" text-anchor="middle" font-size="20" font-weight="bold" fill="#880e4f">数据访问层 (Database类)</text>
+    
+    <text x="200" y="730" text-anchor="middle" font-size="14" fill="#c2185b">用户管理</text>
+    <text x="200" y="750" text-anchor="middle" font-size="12" fill="#880e4f">注册/登录/认证</text>
+    
+    <text x="400" y="730" text-anchor="middle" font-size="14" fill="#c2185b">题库管理</text>
+    <text x="400" y="750" text-anchor="middle" font-size="12" fill="#880e4f">CRUD/收藏/搜索</text>
+    
+    <text x="600" y="730" text-anchor="middle" font-size="14" fill="#c2185b">考试管理</text>
+    <text x="600" y="750" text-anchor="middle" font-size="12" fill="#880e4f">创建/组卷/权限</text>
+    
+    <text x="800" y="730" text-anchor="middle" font-size="14" fill="#c2185b">答题管理</text>
+    <text x="800" y="750" text-anchor="middle" font-size="12" fill="#880e4f">保存/提交/批改</text>
+    
+    <text x="1000" y="730" text-anchor="middle" font-size="14" fill="#c2185b">成绩统计</text>
+    <text x="1000" y="750" text-anchor="middle" font-size="12" fill="#880e4f">班级/个人分析</text>
+    
+    <text x="1200" y="730" text-anchor="middle" font-size="14" fill="#c2185b">通用功能</text>
+    <text x="1200" y="750" text-anchor="middle" font-size="12" fill="#880e4f">连接/事务/查询</text>
+  </g>
+  
+  <!-- 数据库层 -->
+  <g id="database">
+    <rect x="50" y="820" width="1300" height="150" fill="#f3e5f5" stroke="#9c27b0" stroke-width="2" rx="10"/>
+    <text x="700" y="850" text-anchor="middle" font-size="20" font-weight="bold" fill="#4a148c">MySQL数据库</text>
+    
+    <!-- 数据表 -->
+    <rect x="100" y="870" width="120" height="80" fill="#e1bee7" stroke="#9c27b0" stroke-width="1" rx="5"/>
+    <text x="160" y="895" text-anchor="middle" font-size="12" font-weight="bold" fill="#4a148c">用户表</text>
+    <text x="160" y="910" text-anchor="middle" font-size="10" fill="#6a1b9a">students</text>
+    <text x="160" y="925" text-anchor="middle" font-size="10" fill="#6a1b9a">teachers</text>
+    
+    <rect x="250" y="870" width="120" height="80" fill="#e1bee7" stroke="#9c27b0" stroke-width="1" rx="5"/>
+    <text x="310" y="895" text-anchor="middle" font-size="12" font-weight="bold" fill="#4a148c">课程表</text>
+    <text x="310" y="910" text-anchor="middle" font-size="10" fill="#6a1b9a">courses</text>
+    <text x="310" y="925" text-anchor="middle" font-size="10" fill="#6a1b9a">student_courses</text>
+    
+    <rect x="400" y="870" width="120" height="80" fill="#e1bee7" stroke="#9c27b0" stroke-width="1" rx="5"/>
+    <text x="460" y="895" text-anchor="middle" font-size="12" font-weight="bold" fill="#4a148c">题库表</text>
+    <text x="460" y="910" text-anchor="middle" font-size="10" fill="#6a1b9a">questions</text>
+    <text x="460" y="925" text-anchor="middle" font-size="10" fill="#6a1b9a">question_favorites</text>
+    
+    <rect x="550" y="870" width="120" height="80" fill="#e1bee7" stroke="#9c27b0" stroke-width="1" rx="5"/>
+    <text x="610" y="895" text-anchor="middle" font-size="12" font-weight="bold" fill="#4a148c">考试表</text>
+    <text x="610" y="910" text-anchor="middle" font-size="10" fill="#6a1b9a">exams</text>
+    <text x="610" y="925" text-anchor="middle" font-size="10" fill="#6a1b9a">exam_questions</text>
+    
+    <rect x="700" y="870" width="120" height="80" fill="#e1bee7" stroke="#9c27b0" stroke-width="1" rx="5"/>
+    <text x="760" y="895" text-anchor="middle" font-size="12" font-weight="bold" fill="#4a148c">权限表</text>
+    <text x="760" y="910" text-anchor="middle" font-size="10" fill="#6a1b9a">exam_permissions</text>
+    
+    <rect x="850" y="870" width="120" height="80" fill="#e1bee7" stroke="#9c27b0" stroke-width="1" rx="5"/>
+    <text x="910" y="895" text-anchor="middle" font-size="12" font-weight="bold" fill="#4a148c">答题表</text>
+    <text x="910" y="910" text-anchor="middle" font-size="10" fill="#6a1b9a">student_answers</text>
+    
+    <rect x="1000" y="870" width="120" height="80" fill="#e1bee7" stroke="#9c27b0" stroke-width="1" rx="5"/>
+    <text x="1060" y="895" text-anchor="middle" font-size="12" font-weight="bold" fill="#4a148c">视图</text>
+    <text x="1060" y="910" text-anchor="middle" font-size="10" fill="#6a1b9a">student_exam_scores</text>
+    <text x="1060" y="925" text-anchor="middle" font-size="10" fill="#6a1b9a">teacher_question_stats</text>
+    
+    <rect x="1150" y="870" width="150" height="80" fill="#e1bee7" stroke="#9c27b0" stroke-width="1" rx="5"/>
+    <text x="1225" y="895" text-anchor="middle" font-size="12" font-weight="bold" fill="#4a148c">数据库特性</text>
+    <text x="1225" y="910" text-anchor="middle" font-size="10" fill="#6a1b9a">InnoDB引擎</text>
+    <text x="1225" y="925" text-anchor="middle" font-size="10" fill="#6a1b9a">外键约束</text>
+    <text x="1225" y="940" text-anchor="middle" font-size="10" fill="#6a1b9a">UTF8MB4编码</text>
+  </g>
+  
+  <!-- 连接线 -->
+  <g id="connections" stroke="#666" stroke-width="2" fill="none">
+    <!-- 用户层到表示层 -->
+    <path d="M 300 180 L 300 230" marker-end="url(#arrowhead)"/>
+    <path d="M 700 180 L 700 230" marker-end="url(#arrowhead)"/>
+    
+    <!-- 表示层到业务逻辑层 -->
+    <path d="M 190 410 L 190 460" marker-end="url(#arrowhead)"/>
+    <path d="M 410 410 L 410 460" marker-end="url(#arrowhead)"/>
+    <path d="M 630 410 L 630 460" marker-end="url(#arrowhead)"/>
+    <path d="M 850 410 L 850 460" marker-end="url(#arrowhead)"/>
+    <path d="M 1070 410 L 1070 460" marker-end="url(#arrowhead)"/>
+    
+    <!-- 业务逻辑层到数据访问层 -->
+    <path d="M 250 620 L 250 670" marker-end="url(#arrowhead)"/>
+    <path d="M 675 620 L 675 670" marker-end="url(#arrowhead)"/>
+    <path d="M 1125 620 L 1125 670" marker-end="url(#arrowhead)"/>
+    
+    <!-- 数据访问层到数据库层 -->
+    <path d="M 200 790 L 200 820" marker-end="url(#arrowhead)"/>
+    <path d="M 400 790 L 400 820" marker-end="url(#arrowhead)"/>
+    <path d="M 600 790 L 600 820" marker-end="url(#arrowhead)"/>
+    <path d="M 800 790 L 800 820" marker-end="url(#arrowhead)"/>
+    <path d="M 1000 790 L 1000 820" marker-end="url(#arrowhead)"/>
+    <path d="M 1200 790 L 1200 820" marker-end="url(#arrowhead)"/>
+  </g>
+  
+  <!-- 箭头定义 -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+    </marker>
+  </defs>
+  
+  <!-- 技术栈标注 -->
+  <g id="tech-stack">
+    <rect x="50" y="30" width="150" height="30" fill="#ffecb3" stroke="#ffa000" stroke-width="1" rx="5"/>
+    <text x="125" y="50" text-anchor="middle" font-size="14" fill="#e65100">Qt 6.9.1 + C++</text>
+    
+    <rect x="1200" y="30" width="150" height="30" fill="#ffecb3" stroke="#ffa000" stroke-width="1" rx="5"/>
+    <text x="1275" y="50" text-anchor="middle" font-size="14" fill="#e65100">MySQL 8.0+</text>
+  </g>
+</svg>

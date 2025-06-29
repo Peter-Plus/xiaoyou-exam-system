@@ -1,0 +1,5 @@
+下载好qt-unified-windows-x64-4.6.1-online.exe到自定义路径后
+在该路径打开终端
+然后在终端运行.\qt-unified-windows-x64-4.6.1-online.exe --mirror https://mirrors.tuna.tsinghua.edu.cn/qt
+
+然后会弹出安装界面，傻瓜安装一路到底即可，可能需要注册账号，很简单，不需要开梯子

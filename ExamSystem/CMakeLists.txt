@@ -9,24 +9,104 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql Core PrintSupport)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql Core PrintSupport)
+
+# 包含目录
+include_directories(src)
+include_directories(src/core)
+include_directories(src/models)
+include_directories(src/ui)
+include_directories(src/ui/auth)
+include_directories(src/ui/main)
+include_directories(src/ui/student)
+include_directories(src/ui/teacher/questions)
+include_directories(src/ui/teacher/exams)
+include_directories(src/ui/teacher/grading)
+include_directories(src/ui/teacher/statistics)
+include_directories(src/utils)
 
 set(PROJECT_SOURCES
-        main.cpp
-        mainwindow.cpp
-        mainwindow.h
-        mainwindow.ui
-        database.h
-        database.cpp
+    # 主程序文件
+            main.cpp
+
+            # 核心模块
+            src/core/database.h
+            src/core/database.cpp
+
+            # 数据模型
+            src/models/user.h
+            src/models/user.cpp
+            src/models/student.h
+            src/models/student.cpp
+            src/models/teacher.h
+            src/models/teacher.cpp
+            src/models/course.h
+            src/models/course.cpp
+            src/models/exam.h
+            src/models/exam.cpp
+            src/models/question.h
+            src/models/question.cpp
+            src/models/studentanswer.h
+            src/models/studentanswer.cpp
+            src/models/classstatistics.h
+            src/models/classstatistics.cpp
+
+            # 登录注册
+            src/ui/auth/loginwindow.h
+            src/ui/auth/loginwindow.cpp
+            src/ui/auth/registerwindow.h
+            src/ui/auth/registerwindow.cpp
+
+            # 主界面
+            src/ui/main/studentmainwindow.h
+            src/ui/main/studentmainwindow.cpp
+            src/ui/main/teachermainwindow.h
+            src/ui/main/teachermainwindow.cpp
+
+            # 学生界面
+            src/ui/student/studentexamlist.h
+            src/ui/student/studentexamlist.cpp
+            src/ui/student/examtaking.h
+            src/ui/student/examtaking.cpp
+            src/ui/student/examresult.h
+            src/ui/student/examresult.cpp
+
+            # 教师界面 - 题库管理
+            src/ui/teacher/questions/questionmanager.h
+            src/ui/teacher/questions/questionmanager.cpp
+            src/ui/teacher/questions/questiondialog.h
+            src/ui/teacher/questions/questiondialog.cpp
+
+            # 教师界面 - 考试管理
+            src/ui/teacher/exams/exammanager.h
+            src/ui/teacher/exams/exammanager.cpp
+            src/ui/teacher/exams/examdialog.h
+            src/ui/teacher/exams/examdialog.cpp
+            src/ui/teacher/exams/papercomposer.h
+            src/ui/teacher/exams/papercomposer.cpp
+            src/ui/teacher/exams/paperpreview.h
+            src/ui/teacher/exams/paperpreview.cpp
+            src/ui/teacher/exams/permissiondialog.h
+            src/ui/teacher/exams/permissiondialog.cpp
+            src/ui/teacher/exams/examstatusmanager.h
+            src/ui/teacher/exams/examstatusmanager.cpp
+
+            # 教师界面 - 阅卷
+            src/ui/teacher/grading/examgrading.h
+            src/ui/teacher/grading/examgrading.cpp
+
+            # 教师界面 - 成绩统计
+            src/ui/teacher/statistics/classstatisticswindow.h
+            src/ui/teacher/statistics/classstatisticswindow.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(ExamSystem
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
-        database.h
-        database.cpp
+
+
     )
 else()
     if(ANDROID)
@@ -40,7 +120,7 @@ else()
     endif()
 endif()
 
-target_link_libraries(ExamSystem PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Sql)
+target_link_libraries(ExamSystem PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Sql Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::PrintSupport)
 
 if(${QT_VERSION} VERSION_LESS 6.1.0)
   set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.ExamSystem)

@@ -212,13 +212,17 @@ endif()
 ///
 
 
-
-
-
-
-
-
-
+提交到gitee代码仓库：
+cd S:\QT
+git status
+git add ExamSystem/
+git add log/
+git status
+git commit -m "阶段1 Qt环境搭建与MySQL数据库连接
+>> Qt 6.9.1 64位环境配置
+>> MySQL ODBC 9.3驱动连接成功
+>> Database类实现数据库操作"
+git push origin master
 
 
 

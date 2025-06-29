@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小优2.0在线考试系统架构图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .architecture {
+            padding: 40px;
+        }
+
+        .layer {
+            margin-bottom: 40px;
+            position: relative;
+        }
+
+        .layer-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            color: white;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .layer-title::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .layer-title:hover::before {
+            left: 100%;
+        }
+
+        .presentation-layer .layer-title {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+        }
+
+        .business-layer .layer-title {
+            background: linear-gradient(135deg, #4834d4, #686de0);
+        }
+
+        .data-layer .layer-title {
+            background: linear-gradient(135deg, #00d2d3, #01a3a4);
+        }
+
+        .infrastructure-layer .layer-title {
+            background: linear-gradient(135deg, #ff9ff3, #f368e0);
+        }
+
+        .modules {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .module {
+            background: #ffffff;
+            border: 2px solid #e1e8ed;
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .module::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .module:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+
+        .module:hover::before {
+            transform: scaleX(1);
+        }
+
+        .module-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .module h3 {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .module-features {
+            list-style: none;
+            text-align: left;
+        }
+
+        .module-features li {
+            padding: 5px 0;
+            color: #666;
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .module-features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #27ae60;
+            font-weight: bold;
+        }
+
+        .data-flow {
+            margin: 40px 0;
+            text-align: center;
+        }
+
+        .flow-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 30px;
+            margin: 30px 0;
+        }
+
+        .flow-item {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 50px;
+            font-weight: bold;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .flow-item:hover {
+            transform: scale(1.05);
+            box-shadow: 0 12px 35px rgba(102, 126, 234, 0.4);
+        }
+
+        .flow-arrow {
+            font-size: 2em;
+            color: #667eea;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+
+        .tech-stack {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 40px;
+        }
+
+        .tech-stack h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+            font-size: 1.8em;
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .tech-category {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .tech-category:hover {
+            transform: translateY(-5px);
+        }
+
+        .tech-category h4 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .tech-list {
+            list-style: none;
+            color: #666;
+        }
+
+        .tech-list li {
+            padding: 3px 0;
+        }
+
+        .integration-note {
+            background: linear-gradient(135deg, #ffeaa7, #fdcb6e);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            text-align: center;
+            border-left: 5px solid #e17055;
+        }
+
+        .integration-note h3 {
+            color: #2d3436;
+            margin-bottom: 15px;
+        }
+
+        .integration-note p {
+            color: #636e72;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .modules {
+                grid-template-columns: 1fr;
+            }
+            
+            .flow-container {
+                flex-direction: column;
+            }
+            
+            .flow-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 小优2.0在线考试系统</h1>
+            <p>基于Qt的多功能在线教育平台系统架构</p>
+        </div>
+
+        <div class="architecture">
+            <!-- 表示层 -->
+            <div class="layer presentation-layer">
+                <div class="layer-title">
+                    🖥️ 表示层 (Presentation Layer)
+                </div>
+                <div class="modules">
+                    <div class="module">
+                        <div class="module-icon">🏠</div>
+                        <h3>主界面框架</h3>
+                        <ul class="module-features">
+                            <li>QQ风格三栏布局</li>
+                            <li>左侧导航栏</li>
+                            <li>中间列表区</li>
+                            <li>右侧内容区</li>
+                            <li>响应式设计</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">👥</div>
+                        <h3>好友管理界面</h3>
+                        <ul class="module-features">
+                            <li>好友列表展示</li>
+                            <li>好友申请处理</li>
+                            <li>ID搜索功能</li>
+                            <li>班级成员浏览</li>
+                            <li>好友状态显示</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">💬</div>
+                        <h3>聊天系统界面</h3>
+                        <ul class="module-features">
+                            <li>私聊窗口</li>
+                            <li>群聊管理</li>
+                            <li>消息记录</li>
+                            <li>聊天列表</li>
+                            <li>实时通信</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">📚</div>
+                        <h3>课程管理界面</h3>
+                        <ul class="module-features">
+                            <li>课程列表</li>
+                            <li>选课申请</li>
+                            <li>课程通知</li>
+                            <li>作业管理</li>
+                            <li>课程详情</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">📝</div>
+                        <h3>考试系统界面</h3>
+                        <ul class="module-features">
+                            <li>题库管理</li>
+                            <li>考试管理</li>
+                            <li>答题界面</li>
+                            <li>阅卷系统</li>
+                            <li>成绩统计</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 业务逻辑层 -->
+            <div class="layer business-layer">
+                <div class="layer-title">
+                    ⚙️ 业务逻辑层 (Business Logic Layer)
+                </div>
+                <div class="modules">
+                    <div class="module">
+                        <div class="module-icon">🔐</div>
+                        <h3>用户认证服务</h3>
+                        <ul class="module-features">
+                            <li>用户注册登录</li>
+                            <li>权限管理</li>
+                            <li>角色控制</li>
+                            <li>密码加密</li>
+                            <li>会话管理</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">👫</div>
+                        <h3>好友管理服务</h3>
+                        <ul class="module-features">
+                            <li>好友申请处理</li>
+                            <li>好友关系管理</li>
+                            <li>用户搜索</li>
+                            <li>班级成员查询</li>
+                            <li>权限验证</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">💭</div>
+                        <h3>聊天消息服务</h3>
+                        <ul class="module-features">
+                            <li>私聊管理</li>
+                            <li>群聊管理</li>
+                            <li>消息路由</li>
+                            <li>群申请处理</li>
+                            <li>消息记录</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">🎓</div>
+                        <h3>课程管理服务</h3>
+                        <ul class="module-features">
+                            <li>选课申请审核</li>
+                            <li>课程信息管理</li>
+                            <li>通知发布</li>
+                            <li>作业管理</li>
+                            <li>作业批改</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">📊</div>
+                        <h3>考试管理服务</h3>
+                        <ul class="module-features">
+                            <li>题库管理</li>
+                            <li>考试组卷</li>
+                            <li>自动批改</li>
+                            <li>成绩统计</li>
+                            <li>权限控制</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据访问层 -->
+            <div class="layer data-layer">
+                <div class="layer-title">
+                    🗄️ 数据访问层 (Data Access Layer)
+                </div>
+                <div class="modules">
+                    <div class="module">
+                        <div class="module-icon">👤</div>
+                        <h3>用户数据管理</h3>
+                        <ul class="module-features">
+                            <li>学生表 (students)</li>
+                            <li>教师表 (teachers)</li>
+                            <li>课程表 (courses)</li>
+                            <li>选课表 (student_courses)</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">❤️</div>
+                        <h3>社交数据管理</h3>
+                        <ul class="module-features">
+                            <li>好友关系表</li>
+                            <li>好友申请表</li>
+                            <li>私聊关系表</li>
+                            <li>群聊管理表</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">💬</div>
+                        <h3>消息数据管理</h3>
+                        <ul class="module-features">
+                            <li>统一消息表</li>
+                            <li>群聊成员表</li>
+                            <li>群聊申请表</li>
+                            <li>消息路由</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">📚</div>
+                        <h3>课程数据管理</h3>
+                        <ul class="module-features">
+                            <li>课程通知表</li>
+                            <li>课程作业表</li>
+                            <li>作业提交表</li>
+                            <li>课程扩展信息</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">📝</div>
+                        <h3>考试数据管理</h3>
+                        <ul class="module-features">
+                            <li>题目表 (questions)</li>
+                            <li>考试表 (exams)</li>
+                            <li>答题记录表</li>
+                            <li>试卷权限表</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 基础设施层 -->
+            <div class="layer infrastructure-layer">
+                <div class="layer-title">
+                    🏗️ 基础设施层 (Infrastructure Layer)
+                </div>
+                <div class="modules">
+                    <div class="module">
+                        <div class="module-icon">🗃️</div>
+                        <h3>数据库系统</h3>
+                        <ul class="module-features">
+                            <li>MySQL 8.0+</li>
+                            <li>UTF8MB4字符集</li>
+                            <li>InnoDB存储引擎</li>
+                            <li>事务支持</li>
+                            <li>外键约束</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">🔧</div>
+                        <h3>开发框架</h3>
+                        <ul class="module-features">
+                            <li>Qt 6.x框架</li>
+                            <li>Qt Widgets</li>
+                            <li>Qt SQL模块</li>
+                            <li>ODBC驱动</li>
+                            <li>信号槽机制</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">🔒</div>
+                        <h3>安全机制</h3>
+                        <ul class="module-features">
+                            <li>密码哈希加密</li>
+                            <li>SQL注入防护</li>
+                            <li>权限验证</li>
+                            <li>会话安全</li>
+                            <li>数据验证</li>
+                        </ul>
+                    </div>
+                    <div class="module">
+                        <div class="module-icon">⚡</div>
+                        <h3>性能优化</h3>
+                        <ul class="module-features">
+                            <li>数据库索引</li>
+                            <li>查询优化</li>
+                            <li>缓存机制</li>
+                            <li>异步处理</li>
+                            <li>内存管理</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据流向 -->
+            <div class="data-flow">
+                <h2>📊 数据流向图</h2>
+                <div class="flow-container">
+                    <div class="flow-item">用户交互</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-item">界面层</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-item">业务逻辑</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-item">数据访问</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-item">MySQL数据库</div>
+                </div>
+            </div>
+
+            <!-- 技术栈 -->
+            <div class="tech-stack">
+                <h2>🛠️ 技术栈总览</h2>
+                <div class="tech-grid">
+                    <div class="tech-category">
+                        <h4>前端框架</h4>
+                        <ul class="tech-list">
+                            <li>Qt 6.x</li>
+                            <li>Qt Widgets</li>
+                            <li>Qt Designer</li>
+                            <li>QML (可选)</li>
+                        </ul>
+                    </div>
+                    <div class="tech-category">
+                        <h4>数据库</h4>
+                        <ul class="tech-list">
+                            <li>MySQL 8.0+</li>
+                            <li>Qt SQL模块</li>
+                            <li>ODBC驱动</li>
+                            <li>数据库连接池</li>
+                        </ul>
+                    </div>
+                    <div class="tech-category">
+                        <h4>开发语言</h4>
+                        <ul class="tech-list">
+                            <li>C++17</li>
+                            <li>SQL</li>
+                            <li>CMake</li>
+                            <li>Git版本控制</li>
+                        </ul>
+                    </div>
+                    <div class="tech-category">
+                        <h4>开发工具</h4>
+                        <ul class="tech-list">
+                            <li>Qt Creator</li>
+                            <li>MySQL Workbench</li>
+                            <li>CMake</li>
+                            <li>Gitee代码仓库</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 1.0与2.0集成说明 -->
+            <div class="integration-note">
+                <h3>🔄 版本兼容性说明</h3>
+                <p>小优2.0在1.0版本基础上进行扩展，保持向下兼容。原有的考试系统功能完整保留，新增社交、聊天、课程管理等功能模块。采用模块化设计，各功能模块相对独立，便于维护和扩展。</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
