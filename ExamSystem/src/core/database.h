@@ -213,6 +213,35 @@ public:
     bool markMessagesAsRead(int chatId, int userId, const QString &userType);
 
 
+    // ============================================================================
+    // 群聊功能（阶段5新增）
+    // ============================================================================
+
+    // 群聊管理（4个方法）
+    int createGroupChat(const QString &groupName, int creatorId, const QString &creatorType);
+    QList<QVariantMap> getUserGroups(int userId, const QString &userType);
+    QList<QVariantMap> getAllGroups(); // 用于群聊搜索
+    bool deleteGroupChat(int groupId, int userId, const QString &userType);
+
+    // 成员管理（5个方法）
+    bool addGroupMember(int groupId, int userId, const QString &userType);
+    bool removeGroupMember(int groupId, int userId, const QString &userType);
+    QList<QVariantMap> getGroupMembers(int groupId);
+    bool isGroupMember(int groupId, int userId, const QString &userType);
+    int getGroupMemberCount(int groupId);
+
+    // 申请管理（4个方法）
+    bool sendGroupRequest(int groupId, int userId, const QString &userType);
+    bool processGroupRequest(int requestId, bool accept);
+    QList<QVariantMap> getGroupRequests(int groupId);
+    QList<QVariantMap> getUserGroupRequests(int userId, const QString &userType);
+
+    // 权限验证（3个方法）
+    bool isGroupCreator(int groupId, int userId, const QString &userType);
+    bool canManageGroup(int groupId, int userId, const QString &userType);
+    QVariantMap getGroupInfo(int groupId);
+
+
 private:
     QSqlDatabase db;
 

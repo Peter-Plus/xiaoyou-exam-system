@@ -8,6 +8,7 @@ MessageBubbleWidget::MessageBubbleWidget(const MessageInfo &message, QWidget *pa
     : QWidget(parent)
     , m_message(message)
     , m_isFromMe(message.isSentByMe())
+    , m_isGroupChat(false)         // 新增
     , m_maxBubbleWidth(300)
     , m_optimalWidth(MIN_BUBBLE_WIDTH)
 {
@@ -107,34 +108,11 @@ void MessageBubbleWidget::setupLayout()
     m_mainLayout->addWidget(m_headerWidget);
     m_mainLayout->addLayout(m_bubbleWrapperLayout);
 
+    // 初始设置头部可见性（私聊模式下可能隐藏）
+    updateHeaderVisibility();
+
     // 设置样式
-    QString headerStyle = QString(
-                              "#headerWidget {"
-                              "    background-color: transparent;"
-                              "}"
-                              "#senderLabel {"
-                              "    color: %1;"
-                              "    font-weight: bold;"
-                              "}"
-                              "#timeLabel {"
-                              "    color: %2;"
-                              "}"
-                              ).arg(m_isFromMe ? "#666666" : "#666666")
-                              .arg("#999999");
-
-    QString bubbleStyle = QString(
-                              "#bubbleContainer {"
-                              "    background-color: transparent;"
-                              "    border: none;"
-                              "}"
-                              "#messageLabel {"
-                              "    background-color: transparent;"
-                              "    border: none;"
-                              "    color: %1;"
-                              "}"
-                              ).arg(getTextColor().name());
-
-    setStyleSheet(headerStyle + bubbleStyle);
+    setupInitialStyles();
 
     // 连接父窗口的resize事件
     if (parent()) {
@@ -213,9 +191,9 @@ QColor MessageBubbleWidget::getBubbleColor() const
     }
 
     if (m_isFromMe) {
-        return QColor("#007AFF"); // iOS蓝色
+        return m_isGroupChat ? QColor("#4CAF50") : QColor("#007AFF"); // 群聊：绿色，私聊：蓝色
     } else {
-        return QColor("#E5E5EA"); // 浅灰色
+        return m_isGroupChat ? QColor("#FFF3E0") : QColor("#E5E5EA");  // 群聊：橙色系，私聊：灰色
     }
 }
 
@@ -228,7 +206,7 @@ QColor MessageBubbleWidget::getTextColor() const
     if (m_isFromMe) {
         return QColor("#FFFFFF"); // 白色文字
     } else {
-        return QColor("#000000"); // 黑色文字
+        return m_isGroupChat ? QColor("#333333") : QColor("#000000"); // 群聊：深灰，私聊：黑色
     }
 }
 
@@ -417,4 +395,98 @@ QString MessageBubbleWidget::breakLongWord(const QString &word, int maxWidth, co
     }
 
     return result;
+}
+
+void MessageBubbleWidget::setGroupChatMode(bool isGroupChat)
+{
+    m_isGroupChat = isGroupChat;
+
+    if (m_isGroupChat) {
+        updateGroupChatLayout();
+    }
+}
+
+// 新增私有方法：更新群聊布局
+void MessageBubbleWidget::updateGroupChatLayout()
+{
+    if (!m_isGroupChat) return;
+
+    // 在群聊模式下，需要显示发送者姓名（即使是自己发送的消息）
+    if (m_isFromMe) {
+        // 我发送的消息，显示"我"
+        m_senderLabel->setText("我");
+    } else {
+        // 其他人发送的消息，显示发送者姓名
+        m_senderLabel->setText(m_message.getSenderName());
+    }
+
+    // 在群聊中，所有消息都需要显示发送者信息
+    m_headerWidget->setVisible(true);
+
+    // 调整样式以适应群聊
+    updateGroupChatStyles();
+}
+
+// 新增私有方法：更新群聊样式
+void MessageBubbleWidget::updateGroupChatStyles()
+{
+    if (!m_isGroupChat) return;
+
+    // 群聊中的发送者标签样式
+    QString senderColor = m_isFromMe ? "#0066cc" : "#ff6600"; // 我：蓝色，他人：橙色
+
+    QString groupChatStyle = QString(
+                                 "#senderLabel {"
+                                 "    color: %1;"
+                                 "    font-weight: bold;"
+                                 "    font-size: 10px;"
+                                 "}"
+                                 "#timeLabel {"
+                                 "    color: #999999;"
+                                 "    font-size: 9px;"
+                                 "}"
+                                 ).arg(senderColor);
+
+    setStyleSheet(styleSheet() + groupChatStyle);
+}
+
+// 新增私有方法：更新头部可见性
+void MessageBubbleWidget::updateHeaderVisibility()
+{
+    // 在私聊模式下，可以选择隐藏头部信息以节省空间
+    // 在群聊模式下，必须显示头部信息以区分发送者
+    bool shouldShowHeader = m_isGroupChat || (!m_isFromMe); // 群聊或收到的消息显示头部
+    m_headerWidget->setVisible(shouldShowHeader);
+}
+
+// 新增私有方法：设置初始样式
+void MessageBubbleWidget::setupInitialStyles()
+{
+    QString headerStyle = QString(
+                              "#headerWidget {"
+                              "    background-color: transparent;"
+                              "}"
+                              "#senderLabel {"
+                              "    color: %1;"
+                              "    font-weight: bold;"
+                              "}"
+                              "#timeLabel {"
+                              "    color: %2;"
+                              "}"
+                              ).arg(m_isFromMe ? "#666666" : "#666666")
+                              .arg("#999999");
+
+    QString bubbleStyle = QString(
+                              "#bubbleContainer {"
+                              "    background-color: transparent;"
+                              "    border: none;"
+                              "}"
+                              "#messageLabel {"
+                              "    background-color: transparent;"
+                              "    border: none;"
+                              "    color: %1;"
+                              "}"
+                              ).arg(getTextColor().name());
+
+    setStyleSheet(headerStyle + bubbleStyle);
 }

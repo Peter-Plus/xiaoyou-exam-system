@@ -1,3 +1,4 @@
+
 #ifndef CHATPAGE_H
 #define CHATPAGE_H
 
@@ -13,15 +14,18 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QListWidgetItem>
+#include <QTabWidget>
 
 #include "../../core/database.h"
 #include "../../models/chatinfo.h"
 #include "../../models/messageinfo.h"
-#include "messagebubblewidget.h"
 
+// 前向声明
 class ChatListWidget;
 class ChatWindowWidget;
 class MessageBubbleWidget;
+class GroupListWidget;
+class GroupManageWidget;
 
 class ChatPage : public QWidget
 {
@@ -34,21 +38,32 @@ public:
     // 公共方法
     void refreshChatList();
     void openChatWith(int friendId, const QString &friendType, const QString &friendName);
-    //NEW
+    bool hasActiveChat() const;
 
-    bool hasActiveChat() const { return m_currentChatId > 0; }
+    // 新增群聊方法
+    void openGroupChat(int groupId, const QString &groupName);
+    void refreshGroupList();
 
 public slots:
     void onChatSelected(int chatId, int friendId, const QString &friendName);
     void onMessageSent(int chatId);
     void onAutoRefresh();
 
+    // 新增群聊槽函数
+    void onGroupChatSelected(int groupId, const QString &groupName);
+    void onGroupMessageSent(int groupId);
+    void onTabChanged(int index);
+    void onCreateGroupClicked();
+    void onJoinGroupClicked();
+
 signals:
     void messageSent(int chatId);
     void chatOpened(int friendId, const QString &friendName);
+    void groupChatOpened(int groupId, const QString &groupName);
 
 private slots:
     void updateStatistics();
+    void updateGroupStatistics();
 
 private:
     void setupUI();
@@ -56,25 +71,40 @@ private:
     void connectSignals();
     void showWelcomePage();
 
+    // 新增私有方法
+    void setupTabWidget();
+    void createPrivateChatTab();
+    void createGroupListTab();
+    void createGroupManageTab();
+
     // 成员变量
     Database *m_database;
     int m_currentUserId;
     QString m_currentUserType;
 
-    // UI组件
+    // UI组件 - 主布局
     QHBoxLayout *m_mainLayout;
     QSplitter *m_splitter;
 
-    // 左侧区域
-    QWidget *m_leftWidget;
-    QVBoxLayout *m_leftLayout;
-    QLabel *m_titleLabel;
+    // 左侧标签页区域
+    QTabWidget *m_tabWidget;
+    QWidget *m_privateChatTab;
+    QWidget *m_groupChatTab;
+    QWidget *m_groupManageTab;
+
+    // 私聊标签页组件
     ChatListWidget *m_chatListWidget;
     QGroupBox *m_statsGroupBox;
     QLabel *m_statsLabel;
     QPushButton *m_refreshButton;
 
-    // 右侧区域
+    // 群聊标签页组件
+    GroupListWidget *m_groupListWidget;
+
+    // 群聊管理标签页组件
+    GroupManageWidget *m_groupManageWidget;
+
+    // 右侧聊天区域
     QWidget *m_rightWidget;
     ChatWindowWidget *m_chatWindowWidget;
     QLabel *m_welcomeLabel;
@@ -82,9 +112,12 @@ private:
     // 定时器
     QTimer *m_autoRefreshTimer;
 
-    // 状态
-    int m_currentChatId;
+    // 状态变量
+    QString m_currentChatType;  // "私聊" 或 "群聊"
+    int m_currentChatId;        // 私聊ID
     QString m_currentFriendName;
+    int m_currentGroupId;       // 群聊ID
+    QString m_currentGroupName;
 };
 
 // ============================================================================
@@ -131,7 +164,9 @@ public:
     explicit ChatWindowWidget(Database *db, int userId, const QString &userType, QWidget *parent = nullptr);
 
     void openChat(int chatId, int friendId, const QString &friendName);
+    void openGroupChat(int groupId, const QString &groupName);
     void clearChat();
+    void setGroupChatMode(bool isGroupChat);
 
 public slots:
     void sendMessage();
@@ -148,6 +183,7 @@ private:
     void setupUI();
     void setupStyles();
     void loadMessages(bool autoScroll = false);
+    void loadGroupMessages(bool autoScroll = false);
     void addMessageBubble(const MessageInfo &message);
     void scrollToBottom();
     bool validateInput();
@@ -159,6 +195,11 @@ private:
     int m_currentChatId;
     int m_friendId;
     QString m_friendName;
+
+    // 群聊相关成员变量
+    bool m_isGroupChat;
+    int m_currentGroupId;
+    QString m_currentGroupName;
 
     // UI组件
     QVBoxLayout *m_mainLayout;

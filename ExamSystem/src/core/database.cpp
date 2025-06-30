@@ -2958,3 +2958,617 @@ bool Database::markMessagesAsRead(int chatId, int userId, const QString &userTyp
     qDebug() << "标记消息为已读 - 当前版本暂不支持已读状态";
     return true;
 }
+
+// ============================================================================
+// 在 database.h 中添加的群聊管理功能声明
+// ============================================================================
+
+// 在 Database 类的 public 部分添加以下方法声明：
+
+// ============================================================================
+// 群聊功能（阶段5新增）
+// ============================================================================
+
+// 群聊管理（4个方法）
+int createGroupChat(const QString &groupName, int creatorId, const QString &creatorType);
+QList<QVariantMap> getUserGroups(int userId, const QString &userType);
+QList<QVariantMap> getAllGroups(); // 用于群聊搜索
+bool deleteGroupChat(int groupId, int userId, const QString &userType);
+
+// 成员管理（5个方法）
+bool addGroupMember(int groupId, int userId, const QString &userType);
+bool removeGroupMember(int groupId, int userId, const QString &userType);
+QList<QVariantMap> getGroupMembers(int groupId);
+bool isGroupMember(int groupId, int userId, const QString &userType);
+int getGroupMemberCount(int groupId);
+
+// 申请管理（4个方法）
+bool sendGroupRequest(int groupId, int userId, const QString &userType);
+bool processGroupRequest(int requestId, bool accept);
+QList<QVariantMap> getGroupRequests(int groupId);
+QList<QVariantMap> getUserGroupRequests(int userId, const QString &userType);
+
+// 权限验证（3个方法）
+bool isGroupCreator(int groupId, int userId, const QString &userType);
+bool canManageGroup(int groupId, int userId, const QString &userType);
+QVariantMap getGroupInfo(int groupId);
+
+// ============================================================================
+// 在 database.cpp 中添加的群聊管理功能实现
+// ============================================================================
+
+// 群聊管理（4个方法）
+int Database::createGroupChat(const QString &groupName, int creatorId, const QString &creatorType)
+{
+    QSqlQuery query;
+
+    // 创建群聊
+    query.prepare("INSERT INTO group_chats (group_name, creator_id, creator_type) "
+                  "VALUES (?, ?, ?)");
+    query.addBindValue(groupName);
+    query.addBindValue(creatorId);
+    query.addBindValue(creatorType);
+
+    if (!query.exec()) {
+        qDebug() << "创建群聊失败:" << query.lastError().text();
+        return -1;
+    }
+
+    int groupId = query.lastInsertId().toInt();
+
+    // 将创建者添加为群成员
+    if (!addGroupMember(groupId, creatorId, creatorType)) {
+        qDebug() << "将创建者添加为群成员失败";
+        // 删除刚创建的群聊
+        query.prepare("DELETE FROM group_chats WHERE group_id = ?");
+        query.addBindValue(groupId);
+        query.exec();
+        return -1;
+    }
+
+    qDebug() << "成功创建群聊:" << groupName << "群聊ID:" << groupId;
+    return groupId;
+}
+
+QList<QVariantMap> Database::getUserGroups(int userId, const QString &userType)
+{
+    QList<QVariantMap> groups;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT gc.group_id, gc.group_name, gc.creator_id, gc.creator_type, "
+        "       gc.created_time, gc.last_message_time, gc.member_count, "
+        "       CASE gc.creator_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as creator_name, "
+        "       CASE "
+        "           WHEN gc.creator_id = ? AND gc.creator_type = ? THEN '创建者' "
+        "           ELSE '成员' "
+        "       END as user_role "
+        "FROM group_chats gc "
+        "INNER JOIN group_members gm ON gc.group_id = gm.group_id "
+        "LEFT JOIN students s ON (gc.creator_id = s.student_id AND gc.creator_type = '学生') "
+        "LEFT JOIN teachers t ON (gc.creator_id = t.teacher_id AND gc.creator_type = '老师') "
+        "WHERE gm.user_id = ? AND gm.user_type = ? "
+        "ORDER BY IFNULL(gc.last_message_time, gc.created_time) DESC"
+        );
+
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec()) {
+        qDebug() << "获取用户群聊失败:" << query.lastError().text();
+        return groups;
+    }
+
+    while (query.next()) {
+        QVariantMap group;
+        group["group_id"] = query.value("group_id");
+        group["group_name"] = query.value("group_name");
+        group["creator_id"] = query.value("creator_id");
+        group["creator_type"] = query.value("creator_type");
+        group["creator_name"] = query.value("creator_name");
+        group["member_count"] = query.value("member_count");
+        group["user_role"] = query.value("user_role");
+        group["created_time"] = query.value("created_time");
+        group["last_message_time"] = query.value("last_message_time");
+
+        // 获取最后一条消息
+        QVariantMap lastMessage = getLastMessage(group["group_id"].toInt(), "群聊");
+        if (!lastMessage.isEmpty()) {
+            group["last_message"] = lastMessage["content"];
+            group["last_sender_name"] = lastMessage["sender_name"];
+        }
+
+        groups.append(group);
+    }
+
+    qDebug() << "用户" << userId << userType << "的群聊数量:" << groups.size();
+    return groups;
+}
+
+QList<QVariantMap> Database::getAllGroups()
+{
+    QList<QVariantMap> groups;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT gc.group_id, gc.group_name, gc.creator_id, gc.creator_type, "
+        "       gc.member_count, gc.created_time, "
+        "       CASE gc.creator_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as creator_name "
+        "FROM group_chats gc "
+        "LEFT JOIN students s ON (gc.creator_id = s.student_id AND gc.creator_type = '学生') "
+        "LEFT JOIN teachers t ON (gc.creator_id = t.teacher_id AND gc.creator_type = '老师') "
+        "ORDER BY gc.created_time DESC"
+        );
+
+    if (!query.exec()) {
+        qDebug() << "获取所有群聊失败:" << query.lastError().text();
+        return groups;
+    }
+
+    while (query.next()) {
+        QVariantMap group;
+        group["group_id"] = query.value("group_id");
+        group["group_name"] = query.value("group_name");
+        group["creator_id"] = query.value("creator_id");
+        group["creator_type"] = query.value("creator_type");
+        group["creator_name"] = query.value("creator_name");
+        group["member_count"] = query.value("member_count");
+        group["created_time"] = query.value("created_time");
+        groups.append(group);
+    }
+
+    return groups;
+}
+
+bool Database::deleteGroupChat(int groupId, int userId, const QString &userType)
+{
+    // 检查权限：只有创建者可以删除群聊
+    if (!isGroupCreator(groupId, userId, userType)) {
+        qDebug() << "无权限删除群聊:" << groupId;
+        return false;
+    }
+
+    QSqlQuery query;
+    query.prepare("DELETE FROM group_chats WHERE group_id = ?");
+    query.addBindValue(groupId);
+
+    if (!query.exec()) {
+        qDebug() << "删除群聊失败:" << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "成功删除群聊:" << groupId;
+    return true;
+}
+
+// 成员管理（5个方法）
+bool Database::addGroupMember(int groupId, int userId, const QString &userType)
+{
+    // 检查是否已经是成员
+    if (isGroupMember(groupId, userId, userType)) {
+        qDebug() << "用户已经是群成员";
+        return true;
+    }
+
+    QSqlDatabase::database().transaction();
+
+    try {
+        // 添加群成员
+        QSqlQuery query;
+        query.prepare("INSERT INTO group_members (group_id, user_id, user_type) "
+                      "VALUES (?, ?, ?)");
+        query.addBindValue(groupId);
+        query.addBindValue(userId);
+        query.addBindValue(userType);
+
+        if (!query.exec()) {
+            throw std::runtime_error("添加群成员失败");
+        }
+
+        // 更新群聊成员数量
+        query.prepare("UPDATE group_chats SET member_count = member_count + 1 "
+                      "WHERE group_id = ?");
+        query.addBindValue(groupId);
+
+        if (!query.exec()) {
+            throw std::runtime_error("更新群成员数量失败");
+        }
+
+        QSqlDatabase::database().commit();
+        qDebug() << "成功添加群成员:" << userId << userType << "到群聊:" << groupId;
+        return true;
+
+    } catch (const std::exception &e) {
+        QSqlDatabase::database().rollback();
+        qDebug() << "添加群成员失败:" << e.what();
+        return false;
+    }
+}
+
+bool Database::removeGroupMember(int groupId, int userId, const QString &userType)
+{
+    // 检查是否为群成员
+    if (!isGroupMember(groupId, userId, userType)) {
+        qDebug() << "用户不是群成员";
+        return false;
+    }
+
+    // 检查是否为创建者（创建者不能被移除，只能删除群聊）
+    if (isGroupCreator(groupId, userId, userType)) {
+        qDebug() << "不能移除群创建者";
+        return false;
+    }
+
+    QSqlDatabase::database().transaction();
+
+    try {
+        // 移除群成员
+        QSqlQuery query;
+        query.prepare("DELETE FROM group_members WHERE group_id = ? AND user_id = ? AND user_type = ?");
+        query.addBindValue(groupId);
+        query.addBindValue(userId);
+        query.addBindValue(userType);
+
+        if (!query.exec()) {
+            throw std::runtime_error("移除群成员失败");
+        }
+
+        // 更新群聊成员数量
+        query.prepare("UPDATE group_chats SET member_count = member_count - 1 "
+                      "WHERE group_id = ?");
+        query.addBindValue(groupId);
+
+        if (!query.exec()) {
+            throw std::runtime_error("更新群成员数量失败");
+        }
+
+        QSqlDatabase::database().commit();
+        qDebug() << "成功移除群成员:" << userId << userType << "从群聊:" << groupId;
+        return true;
+
+    } catch (const std::exception &e) {
+        QSqlDatabase::database().rollback();
+        qDebug() << "移除群成员失败:" << e.what();
+        return false;
+    }
+}
+
+QList<QVariantMap> Database::getGroupMembers(int groupId)
+{
+    QList<QVariantMap> members;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT gm.user_id, gm.user_type, gm.join_time, "
+        "       CASE gm.user_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as user_name, "
+        "       CASE gm.user_type "
+        "           WHEN '学生' THEN s.college "
+        "           WHEN '老师' THEN t.college "
+        "       END as user_college, "
+        "       CASE gm.user_type "
+        "           WHEN '学生' THEN s.grade "
+        "           ELSE NULL "
+        "       END as user_grade, "
+        "       CASE "
+        "           WHEN gc.creator_id = gm.user_id AND gc.creator_type = gm.user_type THEN '创建者' "
+        "           ELSE '成员' "
+        "       END as role "
+        "FROM group_members gm "
+        "INNER JOIN group_chats gc ON gm.group_id = gc.group_id "
+        "LEFT JOIN students s ON (gm.user_id = s.student_id AND gm.user_type = '学生') "
+        "LEFT JOIN teachers t ON (gm.user_id = t.teacher_id AND gm.user_type = '老师') "
+        "WHERE gm.group_id = ? "
+        "ORDER BY "
+        "  CASE WHEN gc.creator_id = gm.user_id AND gc.creator_type = gm.user_type THEN 0 ELSE 1 END, "
+        "  gm.join_time ASC"
+        );
+    query.addBindValue(groupId);
+
+    if (!query.exec()) {
+        qDebug() << "获取群成员失败:" << query.lastError().text();
+        return members;
+    }
+
+    while (query.next()) {
+        QVariantMap member;
+        member["user_id"] = query.value("user_id");
+        member["user_type"] = query.value("user_type");
+        member["user_name"] = query.value("user_name");
+        member["user_college"] = query.value("user_college");
+        member["user_grade"] = query.value("user_grade");
+        member["role"] = query.value("role");
+        member["join_time"] = query.value("join_time");
+        members.append(member);
+    }
+
+    qDebug() << "群聊" << groupId << "成员数量:" << members.size();
+    return members;
+}
+
+bool Database::isGroupMember(int groupId, int userId, const QString &userType)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM group_members "
+                  "WHERE group_id = ? AND user_id = ? AND user_type = ?");
+    query.addBindValue(groupId);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec() || !query.next()) {
+        return false;
+    }
+
+    return query.value(0).toInt() > 0;
+}
+
+int Database::getGroupMemberCount(int groupId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT member_count FROM group_chats WHERE group_id = ?");
+    query.addBindValue(groupId);
+
+    if (!query.exec() || !query.next()) {
+        return 0;
+    }
+
+    return query.value(0).toInt();
+}
+
+// 申请管理（4个方法）
+bool Database::sendGroupRequest(int groupId, int userId, const QString &userType)
+{
+    // 检查是否已经是群成员
+    if (isGroupMember(groupId, userId, userType)) {
+        qDebug() << "用户已经是群成员，无法发送申请";
+        return false;
+    }
+
+    // 检查是否已有待处理申请
+    QSqlQuery checkQuery;
+    checkQuery.prepare("SELECT COUNT(*) FROM group_requests "
+                       "WHERE group_id = ? AND requester_id = ? AND requester_type = ? AND status = '申请中'");
+    checkQuery.addBindValue(groupId);
+    checkQuery.addBindValue(userId);
+    checkQuery.addBindValue(userType);
+
+    if (!checkQuery.exec() || !checkQuery.next()) {
+        qDebug() << "检查群聊申请失败:" << checkQuery.lastError().text();
+        return false;
+    }
+
+    if (checkQuery.value(0).toInt() > 0) {
+        qDebug() << "已存在待处理的群聊申请";
+        return false;
+    }
+
+    // 发送申请
+    QSqlQuery query;
+    query.prepare("INSERT INTO group_requests (group_id, requester_id, requester_type, status) "
+                  "VALUES (?, ?, ?, '申请中')");
+    query.addBindValue(groupId);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec()) {
+        qDebug() << "发送群聊申请失败:" << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "成功发送群聊申请";
+    return true;
+}
+
+bool Database::processGroupRequest(int requestId, bool accept)
+{
+    QSqlDatabase::database().transaction();
+
+    try {
+        // 获取申请信息
+        QSqlQuery selectQuery;
+        selectQuery.prepare("SELECT group_id, requester_id, requester_type FROM group_requests "
+                            "WHERE request_id = ? AND status = '申请中'");
+        selectQuery.addBindValue(requestId);
+
+        if (!selectQuery.exec() || !selectQuery.next()) {
+            throw std::runtime_error("申请不存在或已处理");
+        }
+
+        int groupId = selectQuery.value("group_id").toInt();
+        int requesterId = selectQuery.value("requester_id").toInt();
+        QString requesterType = selectQuery.value("requester_type").toString();
+
+        if (accept) {
+            // 同意申请：添加用户到群聊
+            if (!addGroupMember(groupId, requesterId, requesterType)) {
+                throw std::runtime_error("添加群成员失败");
+            }
+
+            // 更新申请状态为已同意
+            QSqlQuery updateQuery;
+            updateQuery.prepare("UPDATE group_requests SET status = '已同意' WHERE request_id = ?");
+            updateQuery.addBindValue(requestId);
+
+            if (!updateQuery.exec()) {
+                throw std::runtime_error("更新申请状态失败");
+            }
+        } else {
+            // 拒绝申请：直接删除申请记录
+            QSqlQuery deleteQuery;
+            deleteQuery.prepare("DELETE FROM group_requests WHERE request_id = ?");
+            deleteQuery.addBindValue(requestId);
+
+            if (!deleteQuery.exec()) {
+                throw std::runtime_error("删除申请记录失败");
+            }
+        }
+
+        QSqlDatabase::database().commit();
+        qDebug() << "成功处理群聊申请:" << (accept ? "同意" : "拒绝");
+        return true;
+
+    } catch (const std::exception &e) {
+        QSqlDatabase::database().rollback();
+        qDebug() << "处理群聊申请失败:" << e.what();
+        return false;
+    }
+}
+
+QList<QVariantMap> Database::getGroupRequests(int groupId)
+{
+    QList<QVariantMap> requests;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT gr.request_id, gr.requester_id, gr.requester_type, gr.request_time, "
+        "       CASE gr.requester_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as requester_name, "
+        "       CASE gr.requester_type "
+        "           WHEN '学生' THEN s.college "
+        "           WHEN '老师' THEN t.college "
+        "       END as requester_college, "
+        "       CASE gr.requester_type "
+        "           WHEN '学生' THEN s.grade "
+        "           ELSE NULL "
+        "       END as requester_grade "
+        "FROM group_requests gr "
+        "LEFT JOIN students s ON (gr.requester_id = s.student_id AND gr.requester_type = '学生') "
+        "LEFT JOIN teachers t ON (gr.requester_id = t.teacher_id AND gr.requester_type = '老师') "
+        "WHERE gr.group_id = ? AND gr.status = '申请中' "
+        "ORDER BY gr.request_time DESC"
+        );
+    query.addBindValue(groupId);
+
+    if (!query.exec()) {
+        qDebug() << "获取群聊申请失败:" << query.lastError().text();
+        return requests;
+    }
+
+    while (query.next()) {
+        QVariantMap request;
+        request["request_id"] = query.value("request_id");
+        request["requester_id"] = query.value("requester_id");
+        request["requester_type"] = query.value("requester_type");
+        request["requester_name"] = query.value("requester_name");
+        request["requester_college"] = query.value("requester_college");
+        request["requester_grade"] = query.value("requester_grade");
+        request["request_time"] = query.value("request_time");
+        requests.append(request);
+    }
+
+    return requests;
+}
+
+QList<QVariantMap> Database::getUserGroupRequests(int userId, const QString &userType)
+{
+    QList<QVariantMap> requests;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT gr.request_id, gr.group_id, gr.status, gr.request_time, "
+        "       gc.group_name, gc.creator_id, gc.creator_type, "
+        "       CASE gc.creator_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as creator_name "
+        "FROM group_requests gr "
+        "INNER JOIN group_chats gc ON gr.group_id = gc.group_id "
+        "LEFT JOIN students s ON (gc.creator_id = s.student_id AND gc.creator_type = '学生') "
+        "LEFT JOIN teachers t ON (gc.creator_id = t.teacher_id AND gc.creator_type = '老师') "
+        "WHERE gr.requester_id = ? AND gr.requester_type = ? "
+        "ORDER BY gr.request_time DESC"
+        );
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec()) {
+        qDebug() << "获取用户群聊申请失败:" << query.lastError().text();
+        return requests;
+    }
+
+    while (query.next()) {
+        QVariantMap request;
+        request["request_id"] = query.value("request_id");
+        request["group_id"] = query.value("group_id");
+        request["group_name"] = query.value("group_name");
+        request["creator_id"] = query.value("creator_id");
+        request["creator_type"] = query.value("creator_type");
+        request["creator_name"] = query.value("creator_name");
+        request["status"] = query.value("status");
+        request["request_time"] = query.value("request_time");
+        requests.append(request);
+    }
+
+    return requests;
+}
+
+// 权限验证（3个方法）
+bool Database::isGroupCreator(int groupId, int userId, const QString &userType)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM group_chats "
+                  "WHERE group_id = ? AND creator_id = ? AND creator_type = ?");
+    query.addBindValue(groupId);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec() || !query.next()) {
+        return false;
+    }
+
+    return query.value(0).toInt() > 0;
+}
+
+bool Database::canManageGroup(int groupId, int userId, const QString &userType)
+{
+    // 目前只有创建者可以管理群聊
+    // 未来可以扩展管理员权限
+    return isGroupCreator(groupId, userId, userType);
+}
+
+QVariantMap Database::getGroupInfo(int groupId)
+{
+    QVariantMap groupInfo;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT gc.group_id, gc.group_name, gc.creator_id, gc.creator_type, "
+        "       gc.member_count, gc.created_time, "
+        "       CASE gc.creator_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as creator_name "
+        "FROM group_chats gc "
+        "LEFT JOIN students s ON (gc.creator_id = s.student_id AND gc.creator_type = '学生') "
+        "LEFT JOIN teachers t ON (gc.creator_id = t.teacher_id AND gc.creator_type = '老师') "
+        "WHERE gc.group_id = ?"
+        );
+    query.addBindValue(groupId);
+
+    if (!query.exec() || !query.next()) {
+        qDebug() << "获取群聊信息失败:" << query.lastError().text();
+        return groupInfo;
+    }
+
+    groupInfo["group_id"] = query.value("group_id");
+    groupInfo["group_name"] = query.value("group_name");
+    groupInfo["creator_id"] = query.value("creator_id");
+    groupInfo["creator_type"] = query.value("creator_type");
+    groupInfo["creator_name"] = query.value("creator_name");
+    groupInfo["member_count"] = query.value("member_count");
+    groupInfo["created_time"] = query.value("created_time");
+
+    return groupInfo;
+}

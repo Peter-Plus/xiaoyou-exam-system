@@ -1,4 +1,8 @@
 #include "chatpage.h"
+#include "grouplistwidget.h"
+#include "groupmanagewidget.h"
+#include "creategroupdialog.h"
+#include "joingroupdialog.h"
 #include "messagebubblewidget.h"
 #include <QDebug>
 #include <QMessageBox>
@@ -7,9 +11,10 @@
 #include <QApplication>
 #include <QTimer>
 #include <QEvent>
+#include <QTabWidget>
 
 // ============================================================================
-// ChatPage 主页面实现
+// ChatPage 主页面实现 - 修复后的构造函数
 // ============================================================================
 
 ChatPage::ChatPage(Database *database, int userId, const QString &userType, QWidget *parent)
@@ -17,8 +22,25 @@ ChatPage::ChatPage(Database *database, int userId, const QString &userType, QWid
     , m_database(database)
     , m_currentUserId(userId)
     , m_currentUserType(userType)
+    , m_currentChatType("私聊")
     , m_currentChatId(-1)
     , m_currentFriendName("")
+    , m_currentGroupId(-1)
+    , m_currentGroupName("")
+    , m_tabWidget(nullptr)
+    , m_privateChatTab(nullptr)
+    , m_groupChatTab(nullptr)
+    , m_groupManageTab(nullptr)
+    , m_chatListWidget(nullptr)
+    , m_groupListWidget(nullptr)
+    , m_groupManageWidget(nullptr)
+    , m_statsGroupBox(nullptr)
+    , m_statsLabel(nullptr)
+    , m_refreshButton(nullptr)
+    , m_rightWidget(nullptr)
+    , m_chatWindowWidget(nullptr)
+    , m_welcomeLabel(nullptr)
+    , m_autoRefreshTimer(nullptr)
 {
     setupUI();
     setupStyles();
@@ -39,6 +61,10 @@ ChatPage::~ChatPage()
     }
 }
 
+// ============================================================================
+// 修复后的setupUI方法
+// ============================================================================
+
 void ChatPage::setupUI()
 {
     m_mainLayout = new QHBoxLayout(this);
@@ -48,39 +74,8 @@ void ChatPage::setupUI()
     m_splitter = new QSplitter(Qt::Horizontal, this);
     m_mainLayout->addWidget(m_splitter);
 
-    // 左侧聊天列表区域
-    m_leftWidget = new QWidget();
-    m_leftWidget->setMinimumWidth(250);
-    m_leftWidget->setMaximumWidth(400);
-
-    m_leftLayout = new QVBoxLayout(m_leftWidget);
-    m_leftLayout->setContentsMargins(8, 8, 8, 8);
-    m_leftLayout->setSpacing(8);
-
-    // 标题
-    m_titleLabel = new QLabel("💬 私聊");
-    m_titleLabel->setObjectName("chatTitle");
-
-    // 聊天列表
-    m_chatListWidget = new ChatListWidget(m_database, m_currentUserId, m_currentUserType, this);
-
-    // 统计信息
-    m_statsGroupBox = new QGroupBox("📊 统计信息");
-    m_statsLabel = new QLabel("正在加载...");
-    m_statsLabel->setObjectName("statsLabel");
-
-    QVBoxLayout *statsLayout = new QVBoxLayout(m_statsGroupBox);
-    statsLayout->addWidget(m_statsLabel);
-
-    // 刷新按钮
-    m_refreshButton = new QPushButton("🔄 刷新");
-    m_refreshButton->setObjectName("refreshButton");
-
-    // 组装左侧布局
-    m_leftLayout->addWidget(m_titleLabel);
-    m_leftLayout->addWidget(m_chatListWidget, 1);
-    m_leftLayout->addWidget(m_statsGroupBox);
-    m_leftLayout->addWidget(m_refreshButton);
+    // 创建左侧标签页区域
+    setupTabWidget();
 
     // 右侧聊天窗口区域
     m_rightWidget = new QWidget();
@@ -97,103 +92,274 @@ void ChatPage::setupUI()
     rightLayout->addWidget(m_chatWindowWidget);
 
     // 添加到分割器
-    m_splitter->addWidget(m_leftWidget);
+    m_splitter->addWidget(m_tabWidget);
     m_splitter->addWidget(m_rightWidget);
     m_splitter->setStretchFactor(0, 0);
     m_splitter->setStretchFactor(1, 1);
 
     // 设置初始比例
-    m_splitter->setSizes({300, 700});
+    m_splitter->setSizes({350, 650});
 
     // 定时器
     m_autoRefreshTimer = new QTimer(this);
-    m_autoRefreshTimer->setInterval(2000); // 2秒
+    m_autoRefreshTimer->setInterval(2000);
 }
 
-void ChatPage::setupStyles()
+void ChatPage::setupTabWidget()
 {
-    QString styles = R"(
-        QWidget {
-            background-color: #f5f5f5;
-            font-family: 'Microsoft YaHei', Arial, sans-serif;
-        }
+    m_tabWidget = new QTabWidget();
+    m_tabWidget->setObjectName("chatTabWidget");
+    m_tabWidget->setMinimumWidth(300);
+    m_tabWidget->setMaximumWidth(450);
 
-        #chatTitle {
-            font-size: 16px;
-            font-weight: bold;
-            color: #333;
-            padding: 8px;
-            background-color: #e3f2fd;
-            border-radius: 6px;
-        }
+    // 创建三个标签页
+    createPrivateChatTab();
+    createGroupListTab();
+    createGroupManageTab();
 
-        #statsLabel {
-            font-size: 12px;
-            color: #666;
-            padding: 4px;
-        }
-
-        #refreshButton {
-            padding: 8px 16px;
-            background-color: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-
-        #refreshButton:hover {
-            background-color: #1976D2;
-        }
-
-        #refreshButton:pressed {
-            background-color: #0D47A1;
-        }
-
-        #welcomeLabel {
-            font-size: 18px;
-            color: #999;
-            background-color: white;
-        }
-
-        QGroupBox {
-            font-weight: bold;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            margin-top: 8px;
-            padding-top: 8px;
-        }
-
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 10px;
-            padding: 0 8px 0 8px;
-        }
-
-        QSplitter::handle {
-            background-color: #ddd;
-            width: 2px;
-        }
-
-        QSplitter::handle:hover {
-            background-color: #bbb;
-        }
-    )";
-
-    setStyleSheet(styles);
+    // 连接标签切换信号
+    connect(m_tabWidget, &QTabWidget::currentChanged,
+            this, &ChatPage::onTabChanged);
 }
+
+void ChatPage::createPrivateChatTab()
+{
+    m_privateChatTab = new QWidget();
+
+    QVBoxLayout *privateChatLayout = new QVBoxLayout(m_privateChatTab);
+    privateChatLayout->setContentsMargins(8, 8, 8, 8);
+    privateChatLayout->setSpacing(8);
+
+    // 标题
+    QLabel *titleLabel = new QLabel("💬 私聊");
+    titleLabel->setObjectName("chatTitle");
+
+    // 聊天列表
+    m_chatListWidget = new ChatListWidget(m_database, m_currentUserId, m_currentUserType, this);
+
+    // 统计信息
+    m_statsGroupBox = new QGroupBox("📊 统计信息");
+    m_statsLabel = new QLabel("正在加载...");
+    m_statsLabel->setObjectName("statsLabel");
+
+    QVBoxLayout *statsLayout = new QVBoxLayout(m_statsGroupBox);
+    statsLayout->addWidget(m_statsLabel);
+
+    // 刷新按钮
+    m_refreshButton = new QPushButton("🔄 刷新");
+    m_refreshButton->setObjectName("refreshButton");
+
+    // 组装布局
+    privateChatLayout->addWidget(titleLabel);
+    privateChatLayout->addWidget(m_chatListWidget, 1);
+    privateChatLayout->addWidget(m_statsGroupBox);
+    privateChatLayout->addWidget(m_refreshButton);
+
+    m_tabWidget->addTab(m_privateChatTab, "💬 私聊");
+}
+
+void ChatPage::createGroupListTab()
+{
+    m_groupChatTab = new QWidget();
+
+    QVBoxLayout *groupChatLayout = new QVBoxLayout(m_groupChatTab);
+    groupChatLayout->setContentsMargins(8, 8, 8, 8);
+    groupChatLayout->setSpacing(8);
+
+    // 标题
+    QLabel *titleLabel = new QLabel("👥 群聊");
+    titleLabel->setObjectName("chatTitle");
+
+    // 群聊列表
+    m_groupListWidget = new GroupListWidget(m_database, m_currentUserId, m_currentUserType, this);
+
+    // 操作按钮区域
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *createGroupBtn = new QPushButton("➕ 创建群聊");
+    QPushButton *joinGroupBtn = new QPushButton("🔍 搜索群聊");
+    createGroupBtn->setObjectName("actionButton");
+    joinGroupBtn->setObjectName("actionButton");
+
+    buttonLayout->addWidget(createGroupBtn);
+    buttonLayout->addWidget(joinGroupBtn);
+
+    // 统计信息
+    QGroupBox *groupStatsBox = new QGroupBox("📊 群聊统计");
+    QLabel *groupStatsLabel = new QLabel("我的群聊: 0个\n我创建的: 0个");
+    groupStatsLabel->setObjectName("groupStatsLabel");
+
+    QVBoxLayout *groupStatsLayout = new QVBoxLayout(groupStatsBox);
+    groupStatsLayout->addWidget(groupStatsLabel);
+
+    // 刷新按钮
+    QPushButton *refreshGroupBtn = new QPushButton("🔄 刷新");
+    refreshGroupBtn->setObjectName("refreshButton");
+
+    // 组装布局
+    groupChatLayout->addWidget(titleLabel);
+    groupChatLayout->addWidget(m_groupListWidget, 1);
+    groupChatLayout->addLayout(buttonLayout);
+    groupChatLayout->addWidget(groupStatsBox);
+    groupChatLayout->addWidget(refreshGroupBtn);
+
+    // 连接信号
+    connect(createGroupBtn, &QPushButton::clicked,
+            this, &ChatPage::onCreateGroupClicked);
+    connect(joinGroupBtn, &QPushButton::clicked,
+            this, &ChatPage::onJoinGroupClicked);
+    connect(refreshGroupBtn, &QPushButton::clicked,
+            this, &ChatPage::refreshGroupList);
+    connect(m_groupListWidget, &GroupListWidget::groupSelected,
+            this, &ChatPage::onGroupChatSelected);
+
+    m_tabWidget->addTab(m_groupChatTab, "👥 群聊");
+}
+
+
+void ChatPage::createGroupManageTab()
+{
+    m_groupManageTab = new QWidget();
+
+    // 群聊管理组件
+    m_groupManageWidget = new GroupManageWidget(m_database, m_currentUserId, m_currentUserType, this);
+
+    QVBoxLayout *manageLayout = new QVBoxLayout(m_groupManageTab);
+    manageLayout->setContentsMargins(0, 0, 0, 0);
+    manageLayout->addWidget(m_groupManageWidget);
+
+    // 连接信号
+    connect(m_groupManageWidget, &GroupManageWidget::groupRequestProcessed,
+            this, &ChatPage::refreshGroupList);
+
+    m_tabWidget->addTab(m_groupManageTab, "⚙️ 群聊管理");
+}
+
+
+void ChatPage::onTabChanged(int index)
+{
+    qDebug() << "标签页切换到索引:" << index;
+
+    QString tabText = m_tabWidget->tabText(index);
+    if (tabText.contains("私聊")) {
+        m_currentChatType = "私聊";
+        if (m_currentGroupId > 0) {
+            showWelcomePage();
+            m_currentGroupId = -1;
+        }
+    } else if (tabText.contains("群聊")) {
+        m_currentChatType = "群聊";
+        if (m_currentChatId > 0) {
+            showWelcomePage();
+            m_currentChatId = -1;
+        }
+        refreshGroupList();
+    } else if (tabText.contains("管理")) {
+        m_groupManageWidget->refreshData();
+    }
+}
+
+void ChatPage::onGroupChatSelected(int groupId, const QString &groupName)
+{
+    qDebug() << "选择群聊:" << groupId << groupName;
+
+    m_currentGroupId = groupId;
+    m_currentGroupName = groupName;
+    m_currentChatType = "群聊";
+
+    // 隐藏欢迎页面，显示聊天窗口
+    m_welcomeLabel->hide();
+    m_chatWindowWidget->show();
+    m_chatWindowWidget->openGroupChat(groupId, groupName);
+
+    emit groupChatOpened(groupId, groupName);
+}
+
+void ChatPage::onGroupMessageSent(int groupId)
+{
+    qDebug() << "群聊消息发送完成:" << groupId;
+    m_groupListWidget->refreshGroupList();
+    emit messageSent(groupId);
+}
+
+void ChatPage::refreshGroupList()
+{
+    qDebug() << "刷新群聊列表";
+    if (m_groupListWidget) {
+        m_groupListWidget->refreshGroupList();
+    }
+    updateGroupStatistics();
+}
+
+void ChatPage::openGroupChat(int groupId, const QString &groupName)
+{
+    // 切换到群聊标签页
+    for (int i = 0; i < m_tabWidget->count(); ++i) {
+        if (m_tabWidget->tabText(i).contains("群聊")) {
+            m_tabWidget->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // 打开群聊
+    onGroupChatSelected(groupId, groupName);
+}
+
+void ChatPage::updateGroupStatistics()
+{
+    // 获取群聊统计信息
+    QList<QVariantMap> userGroups = m_database->getUserGroups(m_currentUserId, m_currentUserType);
+
+    int totalGroups = userGroups.size();
+    int createdGroups = 0;
+
+    for (const QVariantMap &group : userGroups) {
+        if (group["user_role"].toString() == "创建者") {
+            createdGroups++;
+        }
+    }
+
+    // 更新群聊标签页中的统计信息
+    QString statsText = QString("我的群聊: %1个\n我创建的: %2个")
+                            .arg(totalGroups)
+                            .arg(createdGroups);
+
+    // 查找并更新统计标签
+    if (m_groupChatTab) {
+        QLabel *groupStatsLabel = m_groupChatTab->findChild<QLabel*>("groupStatsLabel");
+        if (groupStatsLabel) {
+            groupStatsLabel->setText(statsText);
+        }
+    }
+}
+
+void ChatPage::onCreateGroupClicked()
+{
+    CreateGroupDialog dialog(m_database, m_currentUserId, m_currentUserType, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        refreshGroupList();
+        QMessageBox::information(this, "成功", "群聊创建成功！");
+    }
+}
+
+void ChatPage::onJoinGroupClicked()
+{
+    JoinGroupDialog dialog(m_database, m_currentUserId, m_currentUserType, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        refreshGroupList();
+        QMessageBox::information(this, "申请已发送", "加群申请已发送，等待群主审核。");
+    }
+}
+
 
 void ChatPage::connectSignals()
 {
-    // 聊天列表信号
+    // 私聊相关信号
     connect(m_chatListWidget, &ChatListWidget::chatSelected,
             this, &ChatPage::onChatSelected);
 
-    // 聊天窗口信号
     connect(m_chatWindowWidget, &ChatWindowWidget::messageSent,
             this, &ChatPage::onMessageSent);
 
-    // 刷新按钮
     connect(m_refreshButton, &QPushButton::clicked,
             this, &ChatPage::refreshChatList);
 
@@ -262,10 +428,17 @@ void ChatPage::onMessageSent(int chatId)
 
 void ChatPage::onAutoRefresh()
 {
-    // 静默刷新聊天列表
-    m_chatListWidget->refreshChatList();
+    // 私聊自动刷新
+    if (m_chatListWidget) {
+        m_chatListWidget->refreshChatList();
+    }
 
-    //NEW
+    // 群聊自动刷新
+    if (m_groupListWidget) {
+        m_groupListWidget->refreshGroupList();
+    }
+
+    // 聊天窗口刷新
     if (hasActiveChat()) {
         m_chatWindowWidget->refreshMessages();
     }
@@ -440,6 +613,9 @@ ChatWindowWidget::ChatWindowWidget(Database *db, int userId, const QString &user
     , m_currentChatId(-1)
     , m_friendId(-1)
     , m_friendName("")
+    , m_isGroupChat(false)          // 新增
+    , m_currentGroupId(-1)          // 新增
+    , m_currentGroupName("")        // 新增
 {
     setupUI();
     setupStyles();
@@ -528,6 +704,374 @@ void ChatWindowWidget::setupUI()
     m_inputEdit->installEventFilter(this);
 }
 
+
+
+void ChatWindowWidget::openChat(int chatId, int friendId, const QString &friendName)
+{
+    qDebug() << "打开聊天窗口:" << chatId << friendName;
+
+    m_currentChatId = chatId;
+    m_friendId = friendId;
+    m_friendName = friendName;
+
+    m_chatTitleLabel->setText(QString("与 %1 的聊天").arg(friendName));
+
+    loadMessages();
+}
+
+void ChatWindowWidget::clearChat()
+{
+    m_currentChatId = -1;
+    m_friendId = -1;
+    m_friendName = "";
+    m_isGroupChat = false;         // 新增
+    m_currentGroupId = -1;         // 新增
+    m_currentGroupName = "";       // 新增
+    m_chatTitleLabel->setText("选择聊天");
+    clearMessages();
+}
+
+void ChatWindowWidget::loadMessages(bool autoScroll)
+{
+    if (m_currentChatId <= 0) return;
+
+    qDebug() << "加载聊天记录:" << m_currentChatId << "群聊模式:" << m_isGroupChat;
+
+    clearMessages();
+    m_messageList.clear();
+
+    // 根据聊天类型获取消息
+    QString chatType = m_isGroupChat ? "群聊" : "私聊";
+    QList<QVariantMap> messages = m_database->getChatMessages(m_currentChatId, chatType, 50, 0);
+
+    for (const QVariantMap &msgData : messages) {
+        MessageInfo message;
+        message.setMessageId(msgData["message_id"].toInt());
+        message.setSenderId(msgData["sender_id"].toInt());
+        message.setSenderType(msgData["sender_type"].toString());
+        message.setSenderName(msgData["sender_name"].toString());
+        message.setContent(msgData["content"].toString());
+        message.setSendTime(msgData["send_time"].toDateTime());
+
+        // 判断是否为自己发送的消息
+        bool isFromMe = (message.getSenderId() == m_currentUserId &&
+                         message.getSenderType() == m_currentUserType);
+        message.setIsFromMe(isFromMe);
+
+        m_messageList.append(message);
+        addMessageBubble(message);
+    }
+
+    if (autoScroll) {
+        scrollToBottom();
+    }
+}
+
+void ChatWindowWidget::addMessageBubble(const MessageInfo &message)
+{
+    MessageBubbleWidget *bubbleWidget = new MessageBubbleWidget(message, this);
+
+    // 如果是群聊模式，设置群聊标识
+    if (m_isGroupChat) {
+        bubbleWidget->setGroupChatMode(true);
+    }
+
+    // 插入到消息布局中（在stretch之前）
+    int insertIndex = m_messageLayout->count() - 1; // stretch是最后一个
+    m_messageLayout->insertWidget(insertIndex, bubbleWidget);
+}
+
+void ChatWindowWidget::sendMessage()
+{
+    if (!validateInput()) {
+        return;
+    }
+
+    QString content = m_inputEdit->toPlainText().trimmed();
+    qDebug() << "发送消息:" << content << "群聊模式:" << m_isGroupChat;
+
+    // 确定聊天类型
+    QString chatType = m_isGroupChat ? "群聊" : "私聊";
+
+    // 发送消息到数据库
+    int messageId = m_database->sendMessage(m_currentChatId, chatType,
+                                            m_currentUserId, m_currentUserType, content);
+
+    if (messageId <= 0) {
+        QMessageBox::critical(this, "发送失败", "消息发送失败，请重试");
+        return;
+    }
+
+    // 清空输入框
+    m_inputEdit->clear();
+
+    // 刷新消息列表
+    refreshMessages();
+
+    // 发出信号
+    emit messageSent(m_currentChatId);
+
+    qDebug() << "消息发送成功，ID:" << messageId;
+}
+
+void ChatWindowWidget::refreshMessages()
+{
+    if (m_currentChatId <= 0) return;
+
+    // 记录刷新前最后一条消息的 ID
+    int oldLastId = m_messageList.isEmpty() ? -1
+                                            : m_messageList.last().getMessageId();
+
+    loadMessages(false);         // 安静地更新
+
+    int newLastId = m_messageList.isEmpty() ? -1
+                                            : m_messageList.last().getMessageId();
+
+    if (newLastId != oldLastId) {
+        scrollToBottom();        // 只有收到了新消息才滚动
+    }
+}
+
+void ChatWindowWidget::onInputTextChanged()
+{
+    QString text = m_inputEdit->toPlainText().trimmed();
+    m_sendButton->setEnabled(!text.isEmpty());
+}
+
+void ChatWindowWidget::scrollToBottom()
+{
+    QScrollBar *scrollBar = m_messageArea->verticalScrollBar();
+    QTimer::singleShot(100, [scrollBar]() {
+        scrollBar->setValue(scrollBar->maximum());
+    });
+}
+
+bool ChatWindowWidget::validateInput()
+{
+    if (m_currentChatId <= 0) {
+        QString message = m_isGroupChat ? "请先选择群聊" : "请先选择聊天对象";
+        QMessageBox::warning(this, "提示", message);
+        return false;
+    }
+
+    QString content = m_inputEdit->toPlainText().trimmed();
+    if (content.isEmpty()) {
+        QMessageBox::warning(this, "提示", "消息内容不能为空");
+        return false;
+    }
+
+    if (content.length() > 1000) {
+        QMessageBox::warning(this, "提示", "消息内容过长，请控制在1000字符以内");
+        return false;
+    }
+
+    // 群聊权限检查
+    if (m_isGroupChat) {
+        if (!m_database->isGroupMember(m_currentGroupId, m_currentUserId, m_currentUserType)) {
+            QMessageBox::warning(this, "提示", "您不是该群聊的成员，无法发送消息");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void ChatWindowWidget::clearMessages()
+{
+    // 清空消息布局中的所有消息组件（保留stretch）
+    while (m_messageLayout->count() > 1) {
+        QLayoutItem *item = m_messageLayout->takeAt(0);
+        if (item && item->widget()) {
+            delete item->widget();
+        }
+        delete item;
+    }
+    m_messageList.clear();
+}
+
+// 重写事件过滤器以支持Enter发送
+bool ChatWindowWidget::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == m_inputEdit && event->type() == QEvent::KeyPress) {
+        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
+            if (keyEvent->modifiers() == Qt::ShiftModifier) {
+                // Shift+Enter 换行
+                return false;
+            } else {
+                // Enter 发送消息
+                if (m_sendButton->isEnabled()) {
+                    sendMessage();
+                }
+                return true;
+            }
+        }
+    }
+    return QWidget::eventFilter(obj, event);
+}
+
+
+
+// 新增方法：打开群聊
+void ChatWindowWidget::openGroupChat(int groupId, const QString &groupName)
+{
+    qDebug() << "打开群聊窗口:" << groupId << groupName;
+
+    // 切换到群聊模式
+    m_isGroupChat = true;
+    m_currentGroupId = groupId;
+    m_currentGroupName = groupName;
+    m_currentChatId = groupId;  // 群聊使用 groupId 作为 chatId
+
+    // 清理私聊相关状态
+    m_friendId = -1;
+    m_friendName = "";
+
+    m_chatTitleLabel->setText(QString("群聊: %1").arg(groupName));
+
+    loadGroupMessages();
+}
+
+// 新增方法：设置群聊模式
+void ChatWindowWidget::setGroupChatMode(bool isGroupChat)
+{
+    m_isGroupChat = isGroupChat;
+    if (!isGroupChat) {
+        m_currentGroupId = -1;
+        m_currentGroupName = "";
+    }
+}
+
+void ChatWindowWidget::loadGroupMessages(bool autoScroll)
+{
+    loadMessages(autoScroll);  // 复用现有逻辑
+}
+
+bool ChatPage::hasActiveChat() const
+{
+    return m_currentChatId > 0 || m_currentGroupId > 0;
+}
+
+void ChatPage::setupStyles()
+{
+    QString styles = R"(
+        QWidget {
+            background-color: #f5f5f5;
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+        }
+
+        #chatTabWidget {
+            background-color: white;
+            border: none;
+        }
+
+        #chatTabWidget::pane {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+        }
+
+        #chatTabWidget::tab-bar {
+            left: 8px;
+        }
+
+        #chatTabWidget QTabBar::tab {
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            padding: 8px 16px;
+            margin-right: 2px;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+        }
+
+        #chatTabWidget QTabBar::tab:selected {
+            background-color: white;
+            border-bottom: 1px solid white;
+        }
+
+        #chatTabWidget QTabBar::tab:hover {
+            background-color: #e8e8e8;
+        }
+
+        #chatTitle {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            padding: 8px;
+            background-color: #e3f2fd;
+            border-radius: 6px;
+        }
+
+        #actionButton {
+            padding: 6px 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        #actionButton:hover {
+            background-color: #45a049;
+        }
+
+        #statsLabel, #groupStatsLabel {
+            font-size: 12px;
+            color: #666;
+            padding: 4px;
+        }
+
+        #refreshButton {
+            padding: 8px 16px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        #refreshButton:hover {
+            background-color: #1976D2;
+        }
+
+        #refreshButton:pressed {
+            background-color: #0D47A1;
+        }
+
+        #welcomeLabel {
+            font-size: 18px;
+            color: #999;
+            background-color: white;
+        }
+
+        QGroupBox {
+            font-weight: bold;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-top: 8px;
+            padding-top: 8px;
+        }
+
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 8px 0 8px;
+        }
+
+        QSplitter::handle {
+            background-color: #ddd;
+            width: 2px;
+        }
+
+        QSplitter::handle:hover {
+            background-color: #bbb;
+        }
+    )";
+
+    setStyleSheet(styles);
+}
+
 void ChatWindowWidget::setupStyles()
 {
     QString styles = R"(
@@ -592,189 +1136,6 @@ void ChatWindowWidget::setupStyles()
     )";
 
     setStyleSheet(styles);
-}
-
-void ChatWindowWidget::openChat(int chatId, int friendId, const QString &friendName)
-{
-    qDebug() << "打开聊天窗口:" << chatId << friendName;
-
-    m_currentChatId = chatId;
-    m_friendId = friendId;
-    m_friendName = friendName;
-
-    m_chatTitleLabel->setText(QString("与 %1 的聊天").arg(friendName));
-
-    loadMessages();
-}
-
-void ChatWindowWidget::clearChat()
-{
-    m_currentChatId = -1;
-    m_friendId = -1;
-    m_friendName = "";
-    m_chatTitleLabel->setText("选择聊天");
-    clearMessages();
-}
-
-void ChatWindowWidget::loadMessages(bool autoScroll)
-{
-    if (m_currentChatId <= 0) return;
-
-    qDebug() << "加载聊天记录:" << m_currentChatId;
-
-    clearMessages();
-    m_messageList.clear();
-
-    // 获取聊天记录
-    QList<QVariantMap> messages = m_database->getChatMessages(m_currentChatId, "私聊", 50, 0);
-
-    for (const QVariantMap &msgData : messages) {
-        MessageInfo message;
-        message.setMessageId(msgData["message_id"].toInt());
-        message.setSenderId(msgData["sender_id"].toInt());
-        message.setSenderType(msgData["sender_type"].toString());
-        message.setSenderName(msgData["sender_name"].toString());
-        message.setContent(msgData["content"].toString());
-        message.setSendTime(msgData["send_time"].toDateTime());
-
-        // 判断是否为自己发送的消息
-        bool isFromMe = (message.getSenderId() == m_currentUserId &&
-                         message.getSenderType() == m_currentUserType);
-        message.setIsFromMe(isFromMe);
-
-        m_messageList.append(message);
-        addMessageBubble(message);
-    }
-
-    if (autoScroll) {
-        scrollToBottom();        // 只有明确要求时才滚动
-    }
-}
-
-void ChatWindowWidget::addMessageBubble(const MessageInfo &message)
-{
-    MessageBubbleWidget *bubbleWidget = new MessageBubbleWidget(message, this);
-
-    // 插入到消息布局中（在stretch之前）
-    int insertIndex = m_messageLayout->count() - 1; // stretch是最后一个
-    m_messageLayout->insertWidget(insertIndex, bubbleWidget);
-}
-
-void ChatWindowWidget::sendMessage()
-{
-    if (!validateInput()) {
-        return;
-    }
-
-    QString content = m_inputEdit->toPlainText().trimmed();
-    qDebug() << "发送消息:" << content;
-
-    // 发送消息到数据库
-    int messageId = m_database->sendMessage(m_currentChatId, "私聊",
-                                            m_currentUserId, m_currentUserType, content);
-
-    if (messageId <= 0) {
-        QMessageBox::critical(this, "发送失败", "消息发送失败，请重试");
-        return;
-    }
-
-    // 清空输入框
-    m_inputEdit->clear();
-
-    // 刷新消息列表
-    refreshMessages();
-
-    // 发出信号
-    emit messageSent(m_currentChatId);
-
-    qDebug() << "消息发送成功，ID:" << messageId;
-}
-
-void ChatWindowWidget::refreshMessages()
-{
-    if (m_currentChatId <= 0) return;
-
-    // 记录刷新前最后一条消息的 ID
-    int oldLastId = m_messageList.isEmpty() ? -1
-                                            : m_messageList.last().getMessageId();
-
-    loadMessages(false);         // 安静地更新
-
-    int newLastId = m_messageList.isEmpty() ? -1
-                                            : m_messageList.last().getMessageId();
-
-    if (newLastId != oldLastId) {
-        scrollToBottom();        // 只有收到了新消息才滚动
-    }
-}
-
-void ChatWindowWidget::onInputTextChanged()
-{
-    QString text = m_inputEdit->toPlainText().trimmed();
-    m_sendButton->setEnabled(!text.isEmpty());
-}
-
-void ChatWindowWidget::scrollToBottom()
-{
-    QScrollBar *scrollBar = m_messageArea->verticalScrollBar();
-    QTimer::singleShot(100, [scrollBar]() {
-        scrollBar->setValue(scrollBar->maximum());
-    });
-}
-
-bool ChatWindowWidget::validateInput()
-{
-    if (m_currentChatId <= 0) {
-        QMessageBox::warning(this, "提示", "请先选择聊天对象");
-        return false;
-    }
-
-    QString content = m_inputEdit->toPlainText().trimmed();
-    if (content.isEmpty()) {
-        QMessageBox::warning(this, "提示", "消息内容不能为空");
-        return false;
-    }
-
-    if (content.length() > 1000) {
-        QMessageBox::warning(this, "提示", "消息内容过长，请控制在1000字符以内");
-        return false;
-    }
-
-    return true;
-}
-
-void ChatWindowWidget::clearMessages()
-{
-    // 清空消息布局中的所有消息组件（保留stretch）
-    while (m_messageLayout->count() > 1) {
-        QLayoutItem *item = m_messageLayout->takeAt(0);
-        if (item && item->widget()) {
-            delete item->widget();
-        }
-        delete item;
-    }
-    m_messageList.clear();
-}
-
-// 重写事件过滤器以支持Enter发送
-bool ChatWindowWidget::eventFilter(QObject *obj, QEvent *event)
-{
-    if (obj == m_inputEdit && event->type() == QEvent::KeyPress) {
-        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
-        if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
-            if (keyEvent->modifiers() == Qt::ShiftModifier) {
-                // Shift+Enter 换行
-                return false;
-            } else {
-                // Enter 发送消息
-                if (m_sendButton->isEnabled()) {
-                    sendMessage();
-                }
-                return true;
-            }
-        }
-    }
-    return QWidget::eventFilter(obj, event);
 }
 
 #include "chatpage.moc"

@@ -123,6 +123,22 @@ set(PROJECT_SOURCES
             src/ui/chat/chatpage.h
             src/ui/chat/chatpage.cpp
 
+            #群聊相关
+            src/models/groupinfo.h
+            src/models/groupinfo.cpp
+            src/models/grouprequest.h
+            src/models/grouprequest.cpp
+            src/models/groupmember.h
+            src/models/groupmember.cpp
+            src/ui/chat/grouplistwidget.h
+            src/ui/chat/grouplistwidget.cpp
+            src/ui/chat/creategroupdialog.h
+            src/ui/chat/creategroupdialog.cpp
+            src/ui/chat/joingroupdialog.h
+            src/ui/chat/joingroupdialog.cpp
+            src/ui/chat/groupmanagewidget.h
+            src/ui/chat/groupmanagewidget.cpp
+
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

@@ -1,0 +1,388 @@
+# 在线考试系统2.0版本 - 阶段4开发工作日志
+
+## 1. 开发目标
+
+按照二代规划.txt要求，完成私聊功能开发，基于好友关系实现私聊功能，开发聊天界面和消息管理，集成到主界面聊天标签页。
+
+## 2. 开发流程与成果
+
+### 第一步：扩展Database类的聊天方法 ✅
+
+**修改文件**：`src/core/database.h`、`src/core/database.cpp`
+
+**新增核心功能模块**：
+
+#### 私聊关系管理（4个方法）
+- **`getOrCreatePrivateChat()`** - 创建或获取私聊关系ID，使用标准化存储
+- **`getPrivateChats()`** - 获取用户的所有私聊关系，包含好友详细信息
+- **`updatePrivateChatLastMessage()`** - 更新私聊最后消息时间
+- **`canChat()`** - 检查私聊权限，基于好友关系验证
+
+#### 消息管理（6个方法）
+- **`sendMessage()`** - 发送消息到数据库，支持私聊和群聊
+- **`getChatMessages()`** - 获取聊天记录，支持分页加载（50条/页）
+- **`getLastMessage()`** - 获取最新消息，用于聊天列表预览
+- **`deleteMessage()`** - 删除消息（预留功能）
+- **`getUnreadMessageCount()`** - 获取未读消息数量（预留功能）
+- **`markMessagesAsRead()`** - 标记消息为已读（预留功能）
+
+**技术特点**：
+- 完整的权限验证和重复检查
+- 支持跨角色聊天（师生间、学生间、教师间）
+- 标准化的数据存储格式（较小ID在前）
+- 详细的调试日志输出
+- 为群聊功能预留了扩展接口
+
+### 第二步：创建聊天相关数据模型类 ✅
+
+**新建文件**：
+- `src/models/chatinfo.h/cpp` - 私聊信息实体类
+- `src/models/messageinfo.h/cpp` - 消息信息实体类
+
+**ChatInfo类设计**：
+```cpp
+class ChatInfo {
+    // 完整的私聊信息封装
+    // 智能的时间显示（刚刚、分钟前、小时前等）
+    // 便于UI显示的格式化方法
+    // 按最后消息时间排序的比较操作
+};
+```
+
+**MessageInfo类设计**：
+```cpp
+class MessageInfo {
+    enum MessageType { TEXT, SYSTEM };
+    enum MessageStatus { SENDING, SENT, FAILED };
+    
+    // 完整的消息信息封装
+    // 支持不同消息类型（文本、系统消息）
+    // 消息状态管理（发送中、已发送、失败）
+    // 丰富的显示格式化方法
+};
+```
+
+**设计优势**：
+- 简洁实用的属性设计
+- 完整的状态枚举管理
+- 便于UI开发的格式化方法
+- 良好的数据验证机制
+
+### 第三步：开发聊天页面组件 ✅
+
+**新建文件**：`src/ui/chat/chatpage.h/cpp`
+
+**QQ风格界面设计**：
+```
+[左侧聊天列表 30%]           [右侧聊天窗口 70%]
+┌─ 💬 私聊列表 ──────┐     ┌─ 与 张三 的聊天 ──────┐
+├─ [张三]  刚刚      │     │ [消息记录区域]         │
+│   你好，最近怎么样？ │     │ 张三 09:30             │
+├─ [李老师] 2分钟前   │     │ ┌─ 你好，最近怎么样？  │
+│   作业记得提交      │     │ └─────────────────── │
+├─ [王同学] 1小时前   │     │ 我 09:31         ┌─── │
+│   明天考试加油      │     │ ┌─ 最近学习挺忙的   │ │
+├─ ─────────────── │     │ └─────────────── ┘ │
+├─ 📊 统计信息：      │     │ [消息输入区域]         │
+│   总会话: 3个       │     │ ┌─────────────────── │
+│   未读消息: 2条     │     │ │ [在此输入消息...]   │
+└──────────────── ┘     │ └─ [表情] [发送] ──┘
+                            └──────────────────────┘
+```
+
+#### 1. ChatPage主页面组件
+- **统一聊天管理**：管理聊天列表和聊天窗口的协调工作
+- **智能刷新机制**：2秒自动刷新，支持手动刷新
+- **统计信息显示**：好友数量、待处理申请数量
+- **信号槽通信**：松耦合的组件间通信
+
+#### 2. ChatListWidget聊天列表组件
+- **私聊列表展示**：显示所有私聊关系
+- **最后消息预览**：智能截断长消息
+- **时间显示优化**：相对时间显示（刚刚、几分钟前等）
+- **点击切换聊天**：流畅的聊天切换体验
+
+#### 3. ChatWindowWidget聊天窗口组件
+- **消息显示区域**：使用自定义消息气泡组件
+- **消息输入功能**：支持Enter发送、Shift+Enter换行
+- **实时消息刷新**：智能检测新消息并更新
+- **输入验证机制**：消息长度限制、空消息检查
+
+### 第四步：开发智能消息气泡组件 ✅
+
+**新建文件**：`src/ui/chat/messagebubblewidget.h/cpp`
+
+#### 核心功能特点
+
+**1. QQ/微信风格设计**：
+- 圆角气泡背景，现代化视觉效果
+- 发送方和接收方不同的颜色和对齐方式
+- 清晰的信息层次：头部（发送者+时间）+ 气泡（消息内容）
+
+**2. 智能宽度适配**：
+```cpp
+// 短消息：气泡宽度正比于文本长度
+int singleLineWidth = metrics.horizontalAdvance(text);
+if (singleLineWidthWithPadding <= m_maxBubbleWidth) {
+    return qMax(MIN_BUBBLE_WIDTH, singleLineWidthWithPadding);
+}
+
+// 长消息：使用最大宽度，自动换行
+return m_maxBubbleWidth;
+```
+
+**3. 响应式布局**：
+- 窗口调整时自动重新计算气泡大小
+- 最大宽度：父窗口宽度的60%（200px - 600px范围）
+- 事件过滤器监听窗口变化
+
+**4. 智能文本换行**：
+```cpp
+// 检测超长单词
+bool needsForceWrapping(const QString &text, int maxWidth);
+
+// 强制换行处理
+QString insertBreakOpportunities(const QString &text, int maxWidth);
+
+// 超长单词拆分
+QString breakLongWord(const QString &word, int maxWidth, const QFontMetrics &metrics);
+```
+
+**技术亮点**：
+- 使用零宽度空格（\u200B）提供换行机会
+- QFontMetrics精确计算文本宽度
+- 处理连续字符串（如"aaaaaaa..."）的强制换行
+- Qt6兼容性（QRegularExpression替代QRegExp）
+
+### 第五步：集成到主界面 ✅
+
+**修改文件**：
+- `src/ui/main/studentmainwindow.h/cpp`
+- `src/ui/main/teachermainwindow.h/cpp`
+
+#### 学生端集成
+```cpp
+// 构造函数初始化
+StudentMainWindow::StudentMainWindow(const Student &student, Database *database, QWidget *parent)
+    : QMainWindow(parent), currentStudent(student), database(database), 
+      examListWindow(nullptr), m_friendPage(nullptr), m_chatPage(nullptr)
+
+// 聊天页面创建
+void StudentMainWindow::createChatPage() {
+    m_chatPage = new ChatPage(database, currentStudent.getId(), "学生", this);
+    // 信号槽连接...
+}
+```
+
+#### 教师端集成
+```cpp
+// 构造函数初始化
+TeacherMainWindow::TeacherMainWindow(const Teacher &teacher, Database *database, QWidget *parent)
+    : QMainWindow(parent), m_teacher(teacher), m_database(database),
+      /* ... */, m_friendPage(nullptr), m_chatPage(nullptr)
+
+// 聊天页面创建
+void TeacherMainWindow::createChatPage() {
+    m_chatPage = new ChatPage(m_database, m_teacher.getId(), "老师", this);
+    // 信号槽连接...
+}
+```
+
+**集成特点**：
+- **完美兼容现有架构**：保持所有现有代码不变
+- **双端支持**：学生端和教师端统一的聊天体验
+- **智能错误处理**：数据库连接检查和友好错误提示
+- **页面刷新优化**：切换到聊天页面时自动刷新数据
+
+### 第六步：用户体验优化 ✅
+
+#### 智能消息刷新机制
+```cpp
+void ChatWindowWidget::refreshMessages() {
+    // 记录刷新前最后一条消息的ID
+    int oldLastId = m_messageList.isEmpty() ? -1 : m_messageList.last().getMessageId();
+    
+    loadMessages(false);  // 安静地更新
+    
+    int newLastId = m_messageList.isEmpty() ? -1 : m_messageList.last().getMessageId();
+    
+    // 只有收到了新消息才滚动
+    if (newLastId != oldLastId) {
+        scrollToBottom();
+    }
+}
+```
+
+#### 消息气泡布局优化
+- **信息层次清晰**：发送者姓名和时间作为头部信息
+- **气泡内容纯净**：只显示消息内容，更简洁美观
+- **垂直布局优化**：更符合现代聊天应用设计标准
+
+## 3. 技术实现亮点
+
+### 数据库架构设计
+- **标准化存储**：私聊关系使用一致性存储（较小ID在前）
+- **权限验证完整**：基于好友关系的严格权限控制
+- **跨角色支持**：统一处理师生、学生间、教师间的聊天
+- **为群聊预留**：消息表设计支持私聊和群聊
+
+### 界面架构设计
+- **模块化组件**：ChatPage、ChatListWidget、ChatWindowWidget、MessageBubbleWidget
+- **QQ风格布局**：左右分栏，导航清晰，内容丰富
+- **响应式设计**：支持窗口调整，适配不同屏幕
+- **现代化风格**：扁平设计、圆角元素、悬停效果
+
+### 消息处理机制
+- **智能换行**：处理超长单词和特殊字符
+- **实时刷新**：2秒定时刷新 + 手动刷新
+- **状态管理**：发送状态、读取状态、消息类型
+- **性能优化**：分页加载、智能滚动、内存管理
+
+### 用户体验设计
+- **直观操作**：Enter发送、Shift+Enter换行
+- **视觉反馈**：发送按钮状态、消息状态显示
+- **错误处理**：友好的错误提示和异常处理
+- **交互优化**：避免不必要的滚动干扰
+
+## 4. 数据库使用情况
+
+成功使用了以下2.0版本新增数据库表：
+- **private_chats表**：存储私聊关系，支持跨角色
+- **messages表**：统一消息存储，支持私聊和群聊
+
+成功使用了现有数据库表：
+- **students表**：获取学生用户信息
+- **teachers表**：获取教师用户信息
+- **friend_relationships表**：验证好友关系权限
+
+## 5. 功能验证与测试
+
+### 基础功能测试
+✅ **私聊关系管理**：
+- 基于好友关系的权限验证正常
+- 私聊关系创建和获取功能正常
+- 支持师生间、学生间、教师间聊天
+
+✅ **消息发送接收**：
+- 文本消息发送和接收功能正常
+- 消息时间显示正确
+- 消息状态管理正常
+
+✅ **聊天界面功能**：
+- 聊天列表显示和切换正常
+- 消息气泡显示效果优秀
+- 输入验证和发送机制正常
+
+### 高级功能测试
+✅ **智能文本换行**：
+- 短消息：气泡宽度自适应内容长度
+- 长消息：自动在最大宽度处换行
+- 超长单词：强制在边界处拆分换行
+
+✅ **响应式布局**：
+- 窗口大小调整时气泡宽度自适应
+- 分割器拖拽调整聊天区域比例
+- 不同屏幕尺寸下布局合理
+
+✅ **实时通信**：
+- 2秒自动刷新机制正常
+- 新消息智能检测和显示
+- 避免无意义的界面跳动
+
+### 用户体验测试
+✅ **交互体验**：
+- Enter发送、Shift+Enter换行功能正常
+- 发送按钮状态控制正确
+- 输入验证提示友好
+
+✅ **视觉效果**：
+- QQ/微信风格气泡美观
+- 发送方和接收方区分清晰
+- 时间显示格式合理
+
+✅ **性能表现**：
+- 消息加载速度快
+- 界面响应流畅
+- 内存使用合理
+
+## 6. 技术难点突破
+
+### Qt6兼容性问题
+**问题**：`QRegExp`在Qt6中被移除
+**解决方案**：
+```cpp
+// Qt5 写法
+QStringList words = text.split(QRegExp("[\\s\\n\\r\\t]+"), Qt::SkipEmptyParts);
+
+// Qt6 写法
+QRegularExpression regex("[\\s\\n\\r\\t]+");
+QStringList words = text.split(regex, Qt::SkipEmptyParts);
+```
+
+### 智能文本换行算法
+**问题**：如何处理超长单词的强制换行
+**解决方案**：
+```cpp
+QString MessageBubbleWidget::breakLongWord(const QString &word, int maxWidth, const QFontMetrics &metrics) {
+    QString result, currentPart;
+    
+    for (int i = 0; i < word.length(); ++i) {
+        QChar ch = word[i];
+        QString testPart = currentPart + ch;
+        int testWidth = metrics.horizontalAdvance(testPart);
+        
+        if (testWidth <= maxWidth) {
+            currentPart += ch;
+        } else {
+            if (!currentPart.isEmpty()) {
+                result += currentPart + "\u200B";  // 零宽度空格
+                currentPart = QString(ch);
+            }
+        }
+    }
+    return result + currentPart;
+}
+```
+
+### 响应式气泡宽度计算
+**问题**：如何让气泡宽度智能适配窗口大小
+**解决方案**：
+```cpp
+int MessageBubbleWidget::getMaxBubbleWidth() const {
+    QWidget *parent = parentWidget();
+    if (!parent) return 300;
+    
+    int parentWidth = parent->width();
+    if (parentWidth <= 0) return 300;
+    
+    // 最大气泡宽度为父窗口宽度的60%，但限制在200-600px范围内
+    return qMax(200, qMin(600, static_cast<int>(parentWidth * 0.6)));
+}
+```
+
+### 消息刷新优化
+**问题**：如何避免用户浏览历史消息时被强制滚动
+**解决方案**：
+- 记录刷新前后的最后消息ID
+- 只有真正收到新消息时才滚动到底部
+- 提供手动刷新选项
+
+## 7.  阶段4总结
+
+### 开发成果
+**完全按照阶段4规划完成6个开发步骤**：
+1. ✅ **Database类扩展**：添加10个聊天管理核心方法
+2. ✅ **数据模型创建**：ChatInfo、MessageInfo两个实体类
+3. ✅ **聊天页面组件**：ChatPage + 3个子组件，QQ风格设计
+4. ✅ **智能消息气泡**：MessageBubbleWidget，支持智能换行和响应式布局
+5. ✅ **主界面集成**：学生端和教师端完美集成
+6. ✅ **用户体验优化**：智能刷新、布局优化、交互改进
+
+### 产品需求满足
+**完全满足二代产品设计文档要求**：
+- ✅ **基于好友关系**：只有好友才能私聊，权限控制严格
+- ✅ **私聊功能**：双方平等的私聊关系，无创建者概念
+- ✅ **消息记录**：保存完整的聊天历史记录
+- ✅ **统一接口**：为群聊功能预留了统一的消息系统
+- ✅ **现代化界面**：QQ风格布局，符合用户使用习惯
+

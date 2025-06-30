@@ -23,6 +23,9 @@ class MessageBubbleWidget : public QWidget
 public:
     explicit MessageBubbleWidget(const MessageInfo &message, QWidget *parent = nullptr);
 
+    // 新增群聊支持方法
+    void setGroupChatMode(bool isGroupChat);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
@@ -45,16 +48,23 @@ private:
     QString insertBreakOpportunities(const QString &text, int maxWidth);
     QString breakLongWord(const QString &word, int maxWidth, const QFontMetrics &metrics);
 
+    // 新增群聊相关方法
+    void updateGroupChatLayout();
+    void updateGroupChatStyles();
+    void updateHeaderVisibility();
+    void setupInitialStyles();
+
     MessageInfo m_message;
     bool m_isFromMe;
+    bool m_isGroupChat;  // 新增群聊模式标识
 
     // UI组件
-    QVBoxLayout *m_mainLayout;         // 改为垂直布局
-    QWidget *m_headerWidget;           // 新增：头部容器（发送者信息）
-    QHBoxLayout *m_headerLayout;       // 新增：头部布局
-    QLabel *m_senderLabel;             // 新增：发送者姓名标签
-    QLabel *m_timeLabel;               // 时间标签（从气泡内移出）
-    QHBoxLayout *m_bubbleWrapperLayout;// 新增：气泡包装布局
+    QVBoxLayout *m_mainLayout;
+    QWidget *m_headerWidget;
+    QHBoxLayout *m_headerLayout;
+    QLabel *m_senderLabel;
+    QLabel *m_timeLabel;
+    QHBoxLayout *m_bubbleWrapperLayout;
     QWidget *m_bubbleContainer;
     QVBoxLayout *m_bubbleLayout;
     QLabel *m_messageLabel;
@@ -64,7 +74,7 @@ private:
     static const int BUBBLE_PADDING = 12;
     static const int BUBBLE_RADIUS = 12;
     static const int MIN_BUBBLE_WIDTH = 60;
-    static const int HEADER_HEIGHT = 20;   // 新增：头部高度
+    static const int HEADER_HEIGHT = 20;
 
     // 动态计算的参数
     int m_maxBubbleWidth;
