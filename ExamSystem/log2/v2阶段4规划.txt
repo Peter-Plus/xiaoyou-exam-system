@@ -1,0 +1,338 @@
+### 第一步：扩展Database类的聊天方法 ⏰预计时间：2小时
+
+**文件修改**：`src/core/database.h`、`src/core/database.cpp`
+
+**新增核心功能模块**：
+
+#### 私聊关系管理（4个方法）
+```cpp
+// 创建或获取私聊关系ID
+int getOrCreatePrivateChat(int user1Id, const QString &user1Type, 
+                          int user2Id, const QString &user2Type);
+
+// 获取用户的所有私聊关系
+QList<QVariantMap> getPrivateChats(int userId, const QString &userType);
+
+// 更新私聊最后消息时间
+bool updatePrivateChatLastMessage(int chatId);
+
+// 检查私聊权限（基于好友关系）
+bool canChat(int user1Id, const QString &user1Type, 
+             int user2Id, const QString &user2Type);
+```
+
+#### 消息管理（6个方法）
+```cpp
+// 发送消息
+int sendMessage(int chatId, const QString &chatType, 
+                int senderId, const QString &senderType, 
+                const QString &content);
+
+// 获取聊天记录
+QList<QVariantMap> getChatMessages(int chatId, const QString &chatType, 
+                                   int limit = 50, int offset = 0);
+
+// 获取最新消息
+QVariantMap getLastMessage(int chatId, const QString &chatType);
+
+// 删除消息
+bool deleteMessage(int messageId);
+
+// 获取未读消息数量
+int getUnreadMessageCount(int userId, const QString &userType);
+
+// 标记消息为已读
+bool markMessagesAsRead(int chatId, int userId, const QString &userType);
+```
+
+**技术特点**：
+- 基于好友关系的权限验证
+- 支持分页的消息加载
+- 时间排序的消息显示
+- 完整的错误处理和日志
+
+### 第二步：创建聊天相关数据模型类 ⏰预计时间：1.5小时
+
+**新建文件**：
+- `src/models/chatinfo.h/cpp` - 私聊信息实体类
+- `src/models/messageinfo.h/cpp` - 消息信息实体类
+
+**ChatInfo类设计**：
+```cpp
+class ChatInfo {
+private:
+    int chatId;
+    int friendId;
+    QString friendType;
+    QString friendName;
+    QString friendDisplayInfo;
+    QString lastMessage;
+    QDateTime lastMessageTime;
+    int unreadCount;
+
+public:
+    // 构造函数和属性访问器
+    ChatInfo(int id, int fId, const QString &fType, const QString &fName);
+    
+    // 显示格式化方法
+    QString getDisplayName() const;
+    QString getLastMessagePreview() const;
+    QString getTimeDisplay() const;
+    QString getUnreadBadge() const;
+    
+    // 比较排序方法
+    bool operator<(const ChatInfo &other) const; // 按最后消息时间排序
+};
+```
+
+**MessageInfo类设计**：
+```cpp
+class MessageInfo {
+public:
+    enum MessageType { TEXT, SYSTEM };
+    enum MessageStatus { SENDING, SENT, FAILED };
+
+private:
+    int messageId;
+    int senderId;
+    QString senderType;
+    QString senderName;
+    QString content;
+    QDateTime sendTime;
+    MessageType type;
+    MessageStatus status;
+    bool isFromMe;
+
+public:
+    // 构造函数和属性访问器
+    MessageInfo(int id, int sId, const QString &sType, const QString &sName);
+    
+    // 显示格式化方法
+    QString getTimeDisplay() const;
+    QString getSenderDisplay() const;
+    QString getContentHtml() const; // 支持简单HTML格式
+    
+    // 状态判断方法
+    bool isSentByMe() const;
+    bool isSystemMessage() const;
+    Qt::Alignment getAlignment() const; // 消息对齐方式
+};
+```
+
+### 第三步：开发聊天页面组件 ⏰预计时间：4小时
+
+**新建文件**：`src/ui/chat/chatpage.h/cpp`
+
+**QQ风格界面设计**：
+```
+[左侧聊天列表 30%]           [右侧聊天窗口 70%]
+┌─ 💬 私聊列表 ──────┐     ┌─ 与 张三 的聊天 ──────┐
+├─ [张三]  刚刚      │     │ [消息记录区域]         │
+│   你好，最近怎么样？ │     │ 张三 09:30             │
+├─ [李老师] 2分钟前   │     │ ┌─ 你好，最近怎么样？  │
+│   作业记得提交      │     │ └─────────────────── │
+├─ [王同学] 1小时前   │     │ 我 09:31         ┌─── │
+│   明天考试加油      │     │ ┌─ 最近学习挺忙的   │ │
+├─ ─────────────── │     │ └─────────────── ┘ │
+├─ 📊 统计信息：      │     │ [消息输入区域]         │
+│   总会话: 3个       │     │ ┌─────────────────── │
+│   未读消息: 2条     │     │ │ [在此输入消息...]   │
+└──────────────── ┘     │ └─ [表情] [发送] ──┘
+                            └──────────────────────┘
+```
+
+**核心组件设计**：
+
+#### 1. 聊天列表组件（ChatListWidget）
+```cpp
+class ChatListWidget : public QListWidget {
+    Q_OBJECT
+private:
+    Database *m_database;
+    int m_currentUserId;
+    QString m_currentUserType;
+    QTimer *m_refreshTimer;
+
+public:
+    ChatListWidget(Database *db, int userId, const QString &userType, QWidget *parent);
+    void refreshChatList();
+    
+public slots:
+    void onChatSelected(QListWidgetItem *item);
+    void onNewMessageReceived(int chatId);
+    
+signals:
+    void chatSelected(int chatId, int friendId, const QString &friendName);
+    
+private:
+    void createChatItem(const ChatInfo &chat);
+    void updateUnreadBadge(int chatId, int count);
+};
+```
+
+#### 2. 聊天窗口组件（ChatWindowWidget）
+```cpp
+class ChatWindowWidget : public QWidget {
+    Q_OBJECT
+private:
+    Database *m_database;
+    int m_currentUserId;
+    QString m_currentUserType;
+    int m_currentChatId;
+    int m_friendId;
+    QString m_friendName;
+    
+    QScrollArea *m_messageArea;
+    QWidget *m_messageContainer;
+    QVBoxLayout *m_messageLayout;
+    QTextEdit *m_inputEdit;
+    QPushButton *m_sendButton;
+
+public:
+    ChatWindowWidget(Database *db, int userId, const QString &userType, QWidget *parent);
+    void openChat(int chatId, int friendId, const QString &friendName);
+    
+public slots:
+    void sendMessage();
+    void refreshMessages();
+    
+signals:
+    void messageSent(int chatId);
+    
+private:
+    void loadMessages();
+    void addMessageBubble(const MessageInfo &message);
+    void scrollToBottom();
+    bool validateInput();
+};
+```
+
+#### 3. 消息气泡组件（MessageBubbleWidget）
+```cpp
+class MessageBubbleWidget : public QWidget {
+    Q_OBJECT
+private:
+    MessageInfo m_message;
+    bool m_isFromMe;
+
+public:
+    MessageBubbleWidget(const MessageInfo &message, QWidget *parent);
+    
+protected:
+    void paintEvent(QPaintEvent *event) override;
+    
+private:
+    void setupLayout();
+    QColor getBubbleColor() const;
+    Qt::Alignment getAlignment() const;
+};
+```
+
+### 第四步：集成到主界面 ⏰预计时间：1.5小时
+
+**修改文件**：
+- `src/ui/main/studentmainwindow.h/cpp`
+- `src/ui/main/teachermainwindow.h/cpp`
+
+**学生端集成**：
+```cpp
+// studentmainwindow.h 添加
+#include "../../ui/chat/chatpage.h"
+private:
+    ChatPage *m_chatPage;
+
+// studentmainwindow.cpp 修改
+void StudentMainWindow::createChatPage()
+{
+    if (!database) {
+        showErrorPage("聊天功能暂时不可用");
+        return;
+    }
+    
+    m_chatPage = new ChatPage(database, currentStudent.getId(), "学生", this);
+    
+    // 连接信号槽
+    connect(m_chatPage, &ChatPage::messageSent, 
+            this, &StudentMainWindow::onMessageSent);
+    connect(m_chatPage, &ChatPage::chatOpened, 
+            this, &StudentMainWindow::onChatOpened);
+    
+    contentStack->addWidget(m_chatPage);
+    chatPage = m_chatPage; // 保持兼容性
+}
+
+// 新增信号槽处理方法
+void StudentMainWindow::onMessageSent(int chatId);
+void StudentMainWindow::onChatOpened(int friendId, const QString &friendName);
+```
+
+**教师端集成**：
+```cpp
+// 采用与学生端相同的集成模式
+// 传递教师ID和"老师"类型参数
+// 保持教师端红色主题风格
+```
+
+### 第五步：解决技术问题和优化 ⏰预计时间：2小时
+
+**预期技术挑战**：
+
+#### 1. 消息实时刷新机制
+```cpp
+// 方案：定时刷新 + 手动刷新
+QTimer *refreshTimer = new QTimer(this);
+connect(refreshTimer, &QTimer::timeout, this, &ChatPage::checkNewMessages);
+refreshTimer->start(30000); // 30秒检查一次新消息
+```
+
+#### 2. 好友关系权限验证
+```cpp
+// 发送消息前验证好友关系
+bool ChatPage::canSendMessage(int friendId, const QString &friendType) {
+    return m_database->areFriends(m_currentUserId, m_currentUserType, 
+                                  friendId, friendType);
+}
+```
+
+#### 3. 消息气泡样式和布局
+```cpp
+// 使用QStyleSheet实现现代化气泡样式
+QString messageStyle = QString(
+    "QWidget {"
+    "    background-color: %1;"
+    "    border-radius: 12px;"
+    "    padding: 8px 12px;"
+    "    margin: 4px %2;"
+    "}"
+).arg(bubbleColor, marginDirection);
+```
+
+#### 4. 性能优化
+- **分页加载**：一次加载50条消息，支持向上滚动加载更多
+- **内存管理**：及时清理旧消息组件，避免内存泄漏
+- **数据库优化**：使用索引优化消息查询性能
+
+### 第六步：更新项目配置 ⏰预计时间：0.5小时
+
+**修改文件**：`CMakeLists.txt`
+
+**新增编译文件**：
+```cmake
+# 聊天功能模块
+src/models/chatinfo.h
+src/models/chatinfo.cpp
+src/models/messageinfo.h
+src/models/messageinfo.cpp
+src/ui/chat/chatpage.h
+src/ui/chat/chatpage.cpp
+src/ui/chat/chatlistwidget.h
+src/ui/chat/chatlistwidget.cpp
+src/ui/chat/chatwindowwidget.h
+src/ui/chat/chatwindowwidget.cpp
+src/ui/chat/messagebubblewidget.h
+src/ui/chat/messagebubblewidget.cpp
+```
+
+
+
+

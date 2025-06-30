@@ -24,6 +24,7 @@ include_directories(src/ui/teacher/questions)
 include_directories(src/ui/teacher/exams)
 include_directories(src/ui/teacher/grading)
 include_directories(src/ui/teacher/statistics)
+include_directories(src/ui/social)
 include_directories(src/utils)
 
 set(PROJECT_SOURCES
@@ -99,12 +100,36 @@ set(PROJECT_SOURCES
             # 教师界面 - 成绩统计
             src/ui/teacher/statistics/classstatisticswindow.h
             src/ui/teacher/statistics/classstatisticswindow.cpp
+
+            # 好友相关模型
+            src/models/friendinfo.h
+            src/models/friendinfo.cpp
+            src/models/friendrequest.h
+            src/models/friendrequest.cpp
+            src/models/userinfo.h
+            src/models/userinfo.cpp
+            src/ui/friend/friendmanager.h
+            src/ui/friend/friendmanager.cpp
+            src/ui/friend/friendpage.h
+            src/ui/friend/friendpage.cpp
+
+            #私聊相关
+            src/ui/chat/messagebubblewidget.h
+            src/ui/chat/messagebubblewidget.cpp
+            src/models/chatinfo.h
+            src/models/chatinfo.cpp
+            src/models/messageinfo.h
+            src/models/messageinfo.cpp
+            src/ui/chat/chatpage.h
+            src/ui/chat/chatpage.cpp
+
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(ExamSystem
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
+
 
 
     )

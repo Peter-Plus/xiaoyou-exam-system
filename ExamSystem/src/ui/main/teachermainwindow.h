@@ -5,16 +5,23 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QSplitter>
+#include <QStackedWidget>
+#include <QListWidget>
 #include <QLabel>
 #include <QFrame>
 #include <QGridLayout>
 #include <QMessageBox>
+#include <QApplication>
+#include <QScreen>
 #include "teacher.h"
 #include "questionmanager.h"
 #include "exammanager.h"
 #include "examgrading.h"
-#include "classstatisticswindow.h"  // 新增：班级成绩统计窗口
+#include "classstatisticswindow.h"
 #include "database.h"
+#include "../../ui/friend/friendpage.h"
+#include "../../ui/chat/chatpage.h"
 
 class TeacherMainWindow : public QMainWindow
 {
@@ -25,38 +32,98 @@ public:
     ~TeacherMainWindow();
 
 private slots:
-    void onQuestionManagementClicked();  // 题库管理按钮点击
-    void onExamManagementClicked();      // 考试管理按钮点击
-    void onGradingClicked();             // 阅卷按钮点击
-    void onScoreAnalysisClicked();       // 班级成绩分析按钮点击
-    void onLogoutClicked();              // 退出登录按钮点击
-
-signals:
-    void logoutRequested();              // 退出登录信号
+    void onNavigationClicked();
+    void onQuestionManagementClicked();
+    void onExamManagementClicked();
+    void onGradingClicked();
+    void onScoreAnalysisClicked();
+    void onLogoutClicked();
+    // 好友相关槽函数
+    void onFriendAdded(int friendId, const QString &friendType);
+    void onFriendRemoved(int friendId, const QString &friendType);
+    void onRequestProcessed();
+    // 聊天相关槽函数
+    void onMessageSent(int chatId);
+    void onChatOpened(int friendId, const QString &friendName);
 
 private:
-    void setupUI();                      // 设置界面
-    void setupWelcomeArea();             // 设置欢迎区域
-    void setupFunctionArea();            // 设置功能区域
-    void setupBottomArea();              // 设置底部区域
-    QPushButton* createFunctionButton(const QString &text, const QString &description); // 创建功能按钮
+    void setupUI();
+    void setupNavigationBar();
+    void setupContentArea();
+    void setupHeaderArea();
+
+    void createChatPage();          // 2.0预留
+    void createFriendPage();        // 2.0预留
+    void createCoursePage();        // 2.0预留
+    void createQuestionPage();      // 题库管理
+    void createExamPage();          // 考试管理
+    void createGradingPage();       // 阅卷
+    void createStatisticsPage();    // 成绩统计
+    void createSettingsPage();      // 设置
+
+    void switchToPage(int pageIndex);
+    void updateUserInfo();
+    void setModernStyle();
+    QPushButton* createFeatureCard(const QString &title, const QString &subtitle, const QString &buttonText);
+
+    // 导航相关
+    enum NavigationPage {
+        PAGE_CHAT = 0,          // 聊天（2.0功能）
+        PAGE_FRIEND = 1,        // 好友（2.0功能）
+        PAGE_COURSE = 2,        // 课程（2.0功能）
+        PAGE_QUESTION = 3,      // 题库管理
+        PAGE_EXAM = 4,          // 考试管理
+        PAGE_GRADING = 5,       // 阅卷
+        PAGE_STATISTICS = 6,    // 成绩统计
+        PAGE_SETTINGS = 7       // 设置
+    };
 
     // 成员变量
-    Teacher m_teacher;                   // 当前教师信息
-    QuestionManager *m_questionManager; // 题库管理窗口
-    ExamManager *m_examManager;          // 考试管理窗口
-    ExamGrading *m_gradingWindow;        // 阅卷窗口
-    ClassStatisticsWindow *m_statisticsWindow; // 班级成绩统计窗口
-    Database *m_database;                // 数据库连接
+    Teacher m_teacher;
+    Database *m_database;
+    FriendPage *m_friendPage;
+    ChatPage *m_chatPage;
 
-    // 界面组件
-    QLabel *m_welcomeLabel;              // 欢迎标签
-    QLabel *m_infoLabel;                 // 信息标签
-    QPushButton *m_questionMgmtBtn;      // 题库管理按钮
-    QPushButton *m_examMgmtBtn;          // 考试管理按钮
-    QPushButton *m_gradingBtn;           // 阅卷按钮
-    QPushButton *m_scoreAnalysisBtn;     // 成绩分析按钮
-    QPushButton *m_logoutBtn;            // 退出登录按钮
+    // 子窗口指针
+    QuestionManager *m_questionManager;
+    ExamManager *m_examManager;
+    ExamGrading *m_gradingWindow;
+    ClassStatisticsWindow *m_statisticsWindow;
+
+    // 主要UI组件
+    QWidget *centralWidget;
+    QHBoxLayout *mainLayout;
+    QSplitter *mainSplitter;
+
+    // 左侧导航栏
+    QFrame *navigationFrame;
+    QVBoxLayout *navLayout;
+    QListWidget *navigationList;
+
+    // 顶部用户信息
+    QFrame *headerFrame;
+    QLabel *userAvatarLabel;
+    QLabel *userNameLabel;
+    QLabel *userInfoLabel;
+    QPushButton *settingsButton;
+    QPushButton *logoutButton;
+
+    // 中间内容区域
+    QFrame *contentFrame;
+    QStackedWidget *contentStack;
+
+    // 各个页面
+    QWidget *chatPage;
+    QWidget *friendPage;
+    QWidget *coursePage;
+    QWidget *questionPage;
+    QWidget *examPage;
+    QWidget *gradingPage;
+    QWidget *statisticsPage;
+    QWidget *settingsPage;
+
+signals:
+    void logoutRequested();
 };
 
 #endif // TEACHERMAINWINDOW_H

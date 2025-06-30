@@ -152,6 +152,67 @@ public:
 
 
 
+
+
+
+
+    // ============================================================================
+    // 好友管理功能
+    // ============================================================================
+
+    // 好友关系管理
+    bool addFriendship(int user1Id, const QString &user1Type, int user2Id, const QString &user2Type);
+    bool removeFriendship(int user1Id, const QString &user1Type, int user2Id, const QString &user2Type);
+    bool areFriends(int user1Id, const QString &user1Type, int user2Id, const QString &user2Type);
+    QList<QVariantMap> getFriendsList(int userId, const QString &userType);
+
+    // 好友申请管理
+    bool sendFriendRequest(int requesterId, const QString &requesterType, int targetId, const QString &targetType);
+    bool acceptFriendRequest(int requestId);
+    bool rejectFriendRequest(int requestId);
+    QList<QVariantMap> getReceivedFriendRequests(int userId, const QString &userType);
+    QList<QVariantMap> getSentFriendRequests(int userId, const QString &userType);
+    bool hasPendingFriendRequest(int requesterId, const QString &requesterType, int targetId, const QString &targetType);
+
+    // 用户搜索功能
+    QList<QVariantMap> searchUsersByKeyword(const QString &keyword, int currentUserId, const QString &currentUserType);
+    QList<QVariantMap> searchUsersById(int userId, int currentUserId, const QString &currentUserType);
+    QList<QVariantMap> getClassmates(int studentId);
+    QList<QVariantMap> getColleagues(int teacherId);
+
+    // 统计信息
+    int getFriendCount(int userId, const QString &userType);
+    int getPendingRequestCount(int userId, const QString &userType);
+
+
+
+
+
+
+    // ============================================================================
+    // 聊天功能
+    // ============================================================================
+
+    // 私聊关系管理（4个方法）
+    int getOrCreatePrivateChat(int user1Id, const QString &user1Type,
+                               int user2Id, const QString &user2Type);
+    QList<QVariantMap> getPrivateChats(int userId, const QString &userType);
+    bool updatePrivateChatLastMessage(int chatId);
+    bool canChat(int user1Id, const QString &user1Type,
+                 int user2Id, const QString &user2Type);
+
+    // 消息管理（6个方法）
+    int sendMessage(int chatId, const QString &chatType,
+                    int senderId, const QString &senderType,
+                    const QString &content);
+    QList<QVariantMap> getChatMessages(int chatId, const QString &chatType,
+                                       int limit = 50, int offset = 0);
+    QVariantMap getLastMessage(int chatId, const QString &chatType);
+    bool deleteMessage(int messageId);
+    int getUnreadMessageCount(int userId, const QString &userType);
+    bool markMessagesAsRead(int chatId, int userId, const QString &userType);
+
+
 private:
     QSqlDatabase db;
 

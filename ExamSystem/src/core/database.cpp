@@ -4,6 +4,7 @@
 #include "course.h"
 #include "teacher.h"
 #include "studentanswer.h"
+#include <algorithm>  // 用于std::reverse
 
 
 Database::Database()
@@ -2002,4 +2003,958 @@ QList<QMap<QString, QVariant>> Database::getExamStudentScores(int examId)
     }
 
     return studentScores;
+}
+
+
+
+
+
+
+
+// ============================================================================
+// 好友管理功能实现
+// ============================================================================
+
+bool Database::addFriendship(int user1Id, const QString &user1Type, int user2Id, const QString &user2Type)
+{
+    QSqlQuery query;
+
+    // 检查是否已经是好友
+    if (areFriends(user1Id, user1Type, user2Id, user2Type)) {
+        qDebug() << "用户已经是好友关系";
+        return false;
+    }
+
+    // 标准化好友关系（确保较小的ID在前面，保持一致性）
+    int firstUserId, secondUserId;
+    QString firstUserType, secondUserType;
+
+    if (user1Id < user2Id || (user1Id == user2Id && user1Type < user2Type)) {
+        firstUserId = user1Id;
+        firstUserType = user1Type;
+        secondUserId = user2Id;
+        secondUserType = user2Type;
+    } else {
+        firstUserId = user2Id;
+        firstUserType = user2Type;
+        secondUserId = user1Id;
+        secondUserType = user1Type;
+    }
+
+    query.prepare("INSERT INTO friend_relationships (user1_id, user1_type, user2_id, user2_type) "
+                  "VALUES (?, ?, ?, ?)");
+    query.addBindValue(firstUserId);
+    query.addBindValue(firstUserType);
+    query.addBindValue(secondUserId);
+    query.addBindValue(secondUserType);
+
+    if (!query.exec()) {
+        qDebug() << "添加好友关系失败:" << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "成功添加好友关系:" << firstUserId << firstUserType << "-" << secondUserId << secondUserType;
+    return true;
+}
+
+bool Database::removeFriendship(int user1Id, const QString &user1Type, int user2Id, const QString &user2Type)
+{
+    QSqlQuery query;
+
+    query.prepare("DELETE FROM friend_relationships WHERE "
+                  "((user1_id = ? AND user1_type = ? AND user2_id = ? AND user2_type = ?) OR "
+                  "(user1_id = ? AND user1_type = ? AND user2_id = ? AND user2_type = ?))");
+    query.addBindValue(user1Id);
+    query.addBindValue(user1Type);
+    query.addBindValue(user2Id);
+    query.addBindValue(user2Type);
+    query.addBindValue(user2Id);
+    query.addBindValue(user2Type);
+    query.addBindValue(user1Id);
+    query.addBindValue(user1Type);
+
+    if (!query.exec()) {
+        qDebug() << "删除好友关系失败:" << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "成功删除好友关系";
+    return true;
+}
+
+bool Database::areFriends(int user1Id, const QString &user1Type, int user2Id, const QString &user2Type)
+{
+    QSqlQuery query;
+
+    query.prepare("SELECT COUNT(*) FROM friend_relationships WHERE "
+                  "((user1_id = ? AND user1_type = ? AND user2_id = ? AND user2_type = ?) OR "
+                  "(user1_id = ? AND user1_type = ? AND user2_id = ? AND user2_type = ?))");
+    query.addBindValue(user1Id);
+    query.addBindValue(user1Type);
+    query.addBindValue(user2Id);
+    query.addBindValue(user2Type);
+    query.addBindValue(user2Id);
+    query.addBindValue(user2Type);
+    query.addBindValue(user1Id);
+    query.addBindValue(user1Type);
+
+    if (!query.exec() || !query.next()) {
+        qDebug() << "检查好友关系失败:" << query.lastError().text();
+        return false;
+    }
+
+    int count = query.value(0).toInt();
+    qDebug() << "检查好友关系:" << user1Id << user1Type << "和" << user2Id << user2Type << "结果:" << (count > 0);
+    return count > 0;
+}
+
+QList<QVariantMap> Database::getFriendsList(int userId, const QString &userType)
+{
+    QList<QVariantMap> friends;
+    QSqlQuery query;
+
+    // 简化查询逻辑，分别处理 user1 和 user2 的情况
+    query.prepare(
+        "SELECT "
+        "    CASE "
+        "        WHEN fr.user1_id = ? AND fr.user1_type = ? THEN fr.user2_id "
+        "        ELSE fr.user1_id "
+        "    END as friend_id, "
+        "    CASE "
+        "        WHEN fr.user1_id = ? AND fr.user1_type = ? THEN fr.user2_type "
+        "        ELSE fr.user1_type "
+        "    END as friend_type, "
+        "    fr.created_time "
+        "FROM friend_relationships fr "
+        "WHERE (fr.user1_id = ? AND fr.user1_type = ?) OR (fr.user2_id = ? AND fr.user2_type = ?) "
+        "ORDER BY fr.created_time DESC"
+        );
+
+    // 绑定参数
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec()) {
+        qDebug() << "获取好友列表失败:" << query.lastError().text();
+        return friends;
+    }
+
+    // 获取好友基本信息
+    while (query.next()) {
+        int friendId = query.value("friend_id").toInt();
+        QString friendType = query.value("friend_type").toString();
+        QDateTime createdTime = query.value("created_time").toDateTime();
+
+        // 根据好友类型获取详细信息
+        QSqlQuery detailQuery;
+        QString friendName, friendCollege, friendGrade;
+
+        if (friendType == "学生") {
+            detailQuery.prepare("SELECT name, college, grade FROM students WHERE student_id = ?");
+            detailQuery.addBindValue(friendId);
+            if (detailQuery.exec() && detailQuery.next()) {
+                friendName = detailQuery.value("name").toString();
+                friendCollege = detailQuery.value("college").toString();
+                friendGrade = detailQuery.value("grade").toString();
+            }
+        } else if (friendType == "老师") {
+            detailQuery.prepare("SELECT name, college FROM teachers WHERE teacher_id = ?");
+            detailQuery.addBindValue(friendId);
+            if (detailQuery.exec() && detailQuery.next()) {
+                friendName = detailQuery.value("name").toString();
+                friendCollege = detailQuery.value("college").toString();
+                friendGrade = QString(); // 老师没有年级
+            }
+        }
+
+        // 添加到结果列表
+        if (!friendName.isEmpty()) {
+            QVariantMap friendInfo;
+            friendInfo["friend_id"] = friendId;
+            friendInfo["friend_type"] = friendType;
+            friendInfo["friend_name"] = friendName;
+            friendInfo["friend_college"] = friendCollege;
+            friendInfo["friend_grade"] = friendGrade;
+            friendInfo["created_time"] = createdTime;
+            friends.append(friendInfo);
+        }
+    }
+
+    qDebug() << "用户" << userId << userType << "的好友数量:" << friends.size();
+    return friends;
+}
+
+
+bool Database::sendFriendRequest(int requesterId, const QString &requesterType, int targetId, const QString &targetType)
+{
+    // 检查是否已经是好友
+    if (areFriends(requesterId, requesterType, targetId, targetType)) {
+        qDebug() << "用户已经是好友关系，无法发送请求";
+        return false;
+    }
+
+    // 检查是否已经有待处理的请求
+    if (hasPendingFriendRequest(requesterId, requesterType, targetId, targetType)) {
+        qDebug() << "已存在待处理的好友请求";
+        return false;
+    }
+
+    QSqlQuery query;
+    query.prepare("INSERT INTO friend_requests (requester_id, requester_type, target_id, target_type, status) "
+                  "VALUES (?, ?, ?, ?, '申请中')");
+    query.addBindValue(requesterId);
+    query.addBindValue(requesterType);
+    query.addBindValue(targetId);
+    query.addBindValue(targetType);
+
+    if (!query.exec()) {
+        qDebug() << "发送好友请求失败:" << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "成功发送好友请求";
+    return true;
+}
+
+bool Database::acceptFriendRequest(int requestId)
+{
+    QSqlDatabase::database().transaction();
+
+    try {
+        // 获取请求信息
+        QSqlQuery selectQuery;
+        selectQuery.prepare("SELECT requester_id, requester_type, target_id, target_type FROM friend_requests "
+                            "WHERE request_id = ? AND status = '申请中'");
+        selectQuery.addBindValue(requestId);
+
+        if (!selectQuery.exec() || !selectQuery.next()) {
+            throw std::runtime_error("请求不存在或已处理");
+        }
+
+        int requesterId = selectQuery.value("requester_id").toInt();
+        QString requesterType = selectQuery.value("requester_type").toString();
+        int targetId = selectQuery.value("target_id").toInt();
+        QString targetType = selectQuery.value("target_type").toString();
+
+        // 建立好友关系
+        if (!addFriendship(requesterId, requesterType, targetId, targetType)) {
+            throw std::runtime_error("建立好友关系失败");
+        }
+
+        // 更新请求状态
+        QSqlQuery updateQuery;
+        updateQuery.prepare("UPDATE friend_requests SET status = '已同意' WHERE request_id = ?");
+        updateQuery.addBindValue(requestId);
+
+        if (!updateQuery.exec()) {
+            throw std::runtime_error("更新请求状态失败");
+        }
+
+        QSqlDatabase::database().commit();
+        qDebug() << "成功接受好友请求";
+        return true;
+
+    } catch (const std::exception &e) {
+        QSqlDatabase::database().rollback();
+        qDebug() << "接受好友请求失败:" << e.what();
+        return false;
+    }
+}
+
+bool Database::rejectFriendRequest(int requestId)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM friend_requests WHERE request_id = ? AND status = '申请中'");
+    query.addBindValue(requestId);
+
+    if (!query.exec()) {
+        qDebug() << "拒绝好友请求失败:" << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "请求不存在或已处理";
+        return false;
+    }
+
+    qDebug() << "成功拒绝好友请求";
+    return true;
+}
+
+QList<QVariantMap> Database::getReceivedFriendRequests(int userId, const QString &userType)
+{
+    QList<QVariantMap> requests;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT fr.request_id, fr.requester_id, fr.requester_type, "
+        "       CASE fr.requester_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as requester_name, "
+        "       CASE fr.requester_type "
+        "           WHEN '学生' THEN s.college "
+        "           WHEN '老师' THEN t.college "
+        "       END as requester_college, "
+        "       CASE fr.requester_type "
+        "           WHEN '学生' THEN s.grade "
+        "           ELSE NULL "
+        "       END as requester_grade, "
+        "       fr.request_time "
+        "FROM friend_requests fr "
+        "LEFT JOIN students s ON (fr.requester_id = s.student_id AND fr.requester_type = '学生') "
+        "LEFT JOIN teachers t ON (fr.requester_id = t.teacher_id AND fr.requester_type = '老师') "
+        "WHERE fr.target_id = ? AND fr.target_type = ? AND fr.status = '申请中' "
+        "ORDER BY fr.request_time DESC"
+        );
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec()) {
+        qDebug() << "获取收到的好友请求失败:" << query.lastError().text();
+        return requests;
+    }
+
+    while (query.next()) {
+        QVariantMap request;
+        request["request_id"] = query.value("request_id");
+        request["requester_id"] = query.value("requester_id");
+        request["requester_type"] = query.value("requester_type");
+        request["requester_name"] = query.value("requester_name");
+        request["requester_college"] = query.value("requester_college");
+        request["requester_grade"] = query.value("requester_grade");
+        request["request_time"] = query.value("request_time");
+        requests.append(request);
+    }
+
+    return requests;
+}
+
+QList<QVariantMap> Database::getSentFriendRequests(int userId, const QString &userType)
+{
+    QList<QVariantMap> requests;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT fr.request_id, fr.target_id, fr.target_type, "
+        "       CASE fr.target_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as target_name, "
+        "       CASE fr.target_type "
+        "           WHEN '学生' THEN s.college "
+        "           WHEN '老师' THEN t.college "
+        "       END as target_college, "
+        "       fr.status, fr.request_time "
+        "FROM friend_requests fr "
+        "LEFT JOIN students s ON (fr.target_id = s.student_id AND fr.target_type = '学生') "
+        "LEFT JOIN teachers t ON (fr.target_id = t.teacher_id AND fr.target_type = '老师') "
+        "WHERE fr.requester_id = ? AND fr.requester_type = ? "
+        "ORDER BY fr.request_time DESC"
+        );
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec()) {
+        qDebug() << "获取发送的好友请求失败:" << query.lastError().text();
+        return requests;
+    }
+
+    while (query.next()) {
+        QVariantMap request;
+        request["request_id"] = query.value("request_id");
+        request["target_id"] = query.value("target_id");
+        request["target_type"] = query.value("target_type");
+        request["target_name"] = query.value("target_name");
+        request["target_college"] = query.value("target_college");
+        request["status"] = query.value("status");
+        request["request_time"] = query.value("request_time");
+        requests.append(request);
+    }
+
+    return requests;
+}
+
+bool Database::hasPendingFriendRequest(int requesterId, const QString &requesterType, int targetId, const QString &targetType)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM friend_requests WHERE "
+                  "((requester_id = ? AND requester_type = ? AND target_id = ? AND target_type = ?) OR "
+                  "(requester_id = ? AND requester_type = ? AND target_id = ? AND target_type = ?)) "
+                  "AND status = '申请中'");
+    query.addBindValue(requesterId);
+    query.addBindValue(requesterType);
+    query.addBindValue(targetId);
+    query.addBindValue(targetType);
+    query.addBindValue(targetId);
+    query.addBindValue(targetType);
+    query.addBindValue(requesterId);
+    query.addBindValue(requesterType);
+
+    if (!query.exec() || !query.next()) {
+        return false;
+    }
+
+    return query.value(0).toInt() > 0;
+}
+
+QList<QVariantMap> Database::searchUsersByKeyword(const QString &keyword, int currentUserId, const QString &currentUserType)
+{
+    QList<QVariantMap> users;
+
+    if (keyword.trimmed().isEmpty()) {
+        return users;
+    }
+
+    QSqlQuery query;
+
+    // 搜索学生和教师
+    query.prepare(
+        "SELECT student_id as user_id, '学生' as user_type, name, college, grade "
+        "FROM students "
+        "WHERE (name LIKE ? OR CAST(student_id AS CHAR) LIKE ?) AND NOT (student_id = ? AND ? = '学生') "
+        "UNION ALL "
+        "SELECT teacher_id as user_id, '老师' as user_type, name, college, NULL as grade "
+        "FROM teachers "
+        "WHERE (name LIKE ? OR CAST(teacher_id AS CHAR) LIKE ?) AND NOT (teacher_id = ? AND ? = '老师') "
+        "ORDER BY user_type, name"
+        );
+
+    QString searchPattern = "%" + keyword + "%";
+    query.addBindValue(searchPattern);
+    query.addBindValue(searchPattern);
+    query.addBindValue(currentUserId);
+    query.addBindValue(currentUserType);
+    query.addBindValue(searchPattern);
+    query.addBindValue(searchPattern);
+    query.addBindValue(currentUserId);
+    query.addBindValue(currentUserType);
+
+    if (!query.exec()) {
+        qDebug() << "按关键词搜索用户失败:" << query.lastError().text();
+        return users;
+    }
+
+    while (query.next()) {
+        QVariantMap user;
+        user["user_id"] = query.value("user_id");
+        user["user_type"] = query.value("user_type");
+        user["name"] = query.value("name");
+        user["college"] = query.value("college");
+        user["grade"] = query.value("grade");
+
+        // 检查关系状态
+        int userId = user["user_id"].toInt();
+        QString userType = user["user_type"].toString();
+
+        if (areFriends(currentUserId, currentUserType, userId, userType)) {
+            user["relationship"] = "已是好友";
+        } else if (hasPendingFriendRequest(currentUserId, currentUserType, userId, userType)) {
+            user["relationship"] = "已发送请求";
+        } else if (hasPendingFriendRequest(userId, userType, currentUserId, currentUserType)) {
+            user["relationship"] = "待处理请求";
+        } else {
+            user["relationship"] = "可添加";
+        }
+
+        users.append(user);
+    }
+
+    return users;
+}
+
+QList<QVariantMap> Database::searchUsersById(int userId, int currentUserId, const QString &currentUserType)
+{
+    QList<QVariantMap> users;
+    QSqlQuery query;
+
+    // 先搜索学生
+    query.prepare("SELECT student_id as user_id, '学生' as user_type, name, college, grade "
+                  "FROM students WHERE student_id = ?");
+    query.addBindValue(userId);
+
+    if (query.exec() && query.next()) {
+        QVariantMap user;
+        user["user_id"] = query.value("user_id");
+        user["user_type"] = query.value("user_type");
+        user["name"] = query.value("name");
+        user["college"] = query.value("college");
+        user["grade"] = query.value("grade");
+
+        // 添加关系状态检查
+        int searchUserId = user["user_id"].toInt();
+        QString searchUserType = user["user_type"].toString();
+
+        if (areFriends(currentUserId, currentUserType, searchUserId, searchUserType)) {
+            user["relationship"] = "已是好友";
+        } else if (hasPendingFriendRequest(currentUserId, currentUserType, searchUserId, searchUserType)) {
+            user["relationship"] = "已发送请求";
+        } else if (hasPendingFriendRequest(searchUserId, searchUserType, currentUserId, currentUserType)) {
+            user["relationship"] = "待处理请求";
+        } else {
+            user["relationship"] = "可添加";
+        }
+
+        users.append(user);
+        return users;
+    }
+
+    // 再搜索教师
+    query.prepare("SELECT teacher_id as user_id, '老师' as user_type, name, college, NULL as grade "
+                  "FROM teachers WHERE teacher_id = ?");
+    query.addBindValue(userId);
+
+    if (query.exec() && query.next()) {
+        QVariantMap user;
+        user["user_id"] = query.value("user_id");
+        user["user_type"] = query.value("user_type");
+        user["name"] = query.value("name");
+        user["college"] = query.value("college");
+        user["grade"] = query.value("grade");
+
+        // 添加关系状态检查
+        int searchUserId = user["user_id"].toInt();
+        QString searchUserType = user["user_type"].toString();
+
+        if (areFriends(currentUserId, currentUserType, searchUserId, searchUserType)) {
+            user["relationship"] = "已是好友";
+        } else if (hasPendingFriendRequest(currentUserId, currentUserType, searchUserId, searchUserType)) {
+            user["relationship"] = "已发送请求";
+        } else if (hasPendingFriendRequest(searchUserId, searchUserType, currentUserId, currentUserType)) {
+            user["relationship"] = "待处理请求";
+        } else {
+            user["relationship"] = "可添加";
+        }
+
+        users.append(user);
+    }
+
+    return users;
+}
+
+QList<QVariantMap> Database::getClassmates(int studentId)
+{
+    QList<QVariantMap> classmates;
+    QSqlQuery query;
+
+    // 获取同班同学（同一课程的学生）
+    query.prepare(
+        "SELECT DISTINCT s.student_id as user_id, '学生' as user_type, s.name, s.college, s.grade "
+        "FROM students s "
+        "JOIN student_courses sc1 ON s.student_id = sc1.student_id "
+        "JOIN student_courses sc2 ON sc1.course_id = sc2.course_id "
+        "WHERE sc2.student_id = ? AND s.student_id != ? AND sc1.enrollment_status = '已通过' AND sc2.enrollment_status = '已通过' "
+        "ORDER BY s.name"
+        );
+    query.addBindValue(studentId);
+    query.addBindValue(studentId);
+
+    if (!query.exec()) {
+        qDebug() << "获取同班同学失败:" << query.lastError().text();
+        return classmates;
+    }
+
+    while (query.next()) {
+        QVariantMap classmate;
+        classmate["user_id"] = query.value("user_id");
+        classmate["user_type"] = query.value("user_type");
+        classmate["name"] = query.value("name");
+        classmate["college"] = query.value("college");
+        classmate["grade"] = query.value("grade");
+        classmates.append(classmate);
+    }
+
+    return classmates;
+}
+
+QList<QVariantMap> Database::getColleagues(int teacherId)
+{
+    QList<QVariantMap> colleagues;
+    QSqlQuery query;
+
+    // 获取同学院的教师
+    query.prepare(
+        "SELECT DISTINCT t2.teacher_id as user_id, '老师' as user_type, t2.name, t2.college, NULL as grade "
+        "FROM teachers t1 "
+        "JOIN teachers t2 ON t1.college = t2.college "
+        "WHERE t1.teacher_id = ? AND t2.teacher_id != ? "
+        "ORDER BY t2.name"
+        );
+    query.addBindValue(teacherId);
+    query.addBindValue(teacherId);
+
+    if (!query.exec()) {
+        qDebug() << "获取同事失败:" << query.lastError().text();
+        return colleagues;
+    }
+
+    while (query.next()) {
+        QVariantMap colleague;
+        colleague["user_id"] = query.value("user_id");
+        colleague["user_type"] = query.value("user_type");
+        colleague["name"] = query.value("name");
+        colleague["college"] = query.value("college");
+        colleague["grade"] = query.value("grade");
+        colleagues.append(colleague);
+    }
+
+    return colleagues;
+}
+
+int Database::getFriendCount(int userId, const QString &userType)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM friend_relationships WHERE "
+                  "(user1_id = ? AND user1_type = ?) OR (user2_id = ? AND user2_type = ?)");
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec() || !query.next()) {
+        return 0;
+    }
+
+    return query.value(0).toInt();
+}
+
+int Database::getPendingRequestCount(int userId, const QString &userType)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM friend_requests WHERE "
+                  "target_id = ? AND target_type = ? AND status = '申请中'");
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec() || !query.next()) {
+        return 0;
+    }
+
+    return query.value(0).toInt();
+}
+
+
+
+// ============================================================================
+// 聊天功能实现
+// ============================================================================
+
+int Database::getOrCreatePrivateChat(int user1Id, const QString &user1Type,
+                                     int user2Id, const QString &user2Type)
+{
+    QSqlQuery query;
+
+    // 首先检查私聊关系是否已存在（双向查询）
+    query.prepare("SELECT chat_id FROM private_chats WHERE "
+                  "((user1_id = ? AND user1_type = ? AND user2_id = ? AND user2_type = ?) OR "
+                  "(user1_id = ? AND user1_type = ? AND user2_id = ? AND user2_type = ?))");
+    query.addBindValue(user1Id);
+    query.addBindValue(user1Type);
+    query.addBindValue(user2Id);
+    query.addBindValue(user2Type);
+    query.addBindValue(user2Id);
+    query.addBindValue(user2Type);
+    query.addBindValue(user1Id);
+    query.addBindValue(user1Type);
+
+    if (!query.exec()) {
+        qDebug() << "查询私聊关系失败:" << query.lastError().text();
+        return -1;
+    }
+
+    // 如果已存在，返回chat_id
+    if (query.next()) {
+        int chatId = query.value("chat_id").toInt();
+        qDebug() << "私聊关系已存在，chat_id:" << chatId;
+        return chatId;
+    }
+
+    // 标准化存储（较小ID在前）
+    int firstUserId, secondUserId;
+    QString firstUserType, secondUserType;
+
+    if (user1Id < user2Id || (user1Id == user2Id && user1Type < user2Type)) {
+        firstUserId = user1Id;
+        firstUserType = user1Type;
+        secondUserId = user2Id;
+        secondUserType = user2Type;
+    } else {
+        firstUserId = user2Id;
+        firstUserType = user2Type;
+        secondUserId = user1Id;
+        secondUserType = user1Type;
+    }
+
+    // 创建新的私聊关系
+    query.prepare("INSERT INTO private_chats (user1_id, user1_type, user2_id, user2_type) "
+                  "VALUES (?, ?, ?, ?)");
+    query.addBindValue(firstUserId);
+    query.addBindValue(firstUserType);
+    query.addBindValue(secondUserId);
+    query.addBindValue(secondUserType);
+
+    if (!query.exec()) {
+        qDebug() << "创建私聊关系失败:" << query.lastError().text();
+        return -1;
+    }
+
+    int chatId = query.lastInsertId().toInt();
+    qDebug() << "成功创建私聊关系，chat_id:" << chatId;
+    return chatId;
+}
+
+QList<QVariantMap> Database::getPrivateChats(int userId, const QString &userType)
+{
+    QList<QVariantMap> chats;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT pc.chat_id, "
+        "       CASE "
+        "           WHEN pc.user1_id = ? AND pc.user1_type = ? THEN pc.user2_id "
+        "           ELSE pc.user1_id "
+        "       END as friend_id, "
+        "       CASE "
+        "           WHEN pc.user1_id = ? AND pc.user1_type = ? THEN pc.user2_type "
+        "           ELSE pc.user1_type "
+        "       END as friend_type, "
+        "       pc.created_time, pc.last_message_time "
+        "FROM private_chats pc "
+        "WHERE (pc.user1_id = ? AND pc.user1_type = ?) OR (pc.user2_id = ? AND pc.user2_type = ?) "
+        "ORDER BY IFNULL(pc.last_message_time, pc.created_time) DESC"
+        );
+
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+    query.addBindValue(userId);
+    query.addBindValue(userType);
+
+    if (!query.exec()) {
+        qDebug() << "获取私聊列表失败:" << query.lastError().text();
+        return chats;
+    }
+
+    while (query.next()) {
+        QVariantMap chat;
+        chat["chat_id"] = query.value("chat_id");
+        chat["friend_id"] = query.value("friend_id");
+        chat["friend_type"] = query.value("friend_type");
+        chat["created_time"] = query.value("created_time");
+        chat["last_message_time"] = query.value("last_message_time");
+
+        // 获取好友详细信息
+        int friendId = chat["friend_id"].toInt();
+        QString friendType = chat["friend_type"].toString();
+
+        QSqlQuery detailQuery;
+        if (friendType == "学生") {
+            detailQuery.prepare("SELECT name, college, grade FROM students WHERE student_id = ?");
+            detailQuery.addBindValue(friendId);
+            if (detailQuery.exec() && detailQuery.next()) {
+                chat["friend_name"] = detailQuery.value("name");
+                chat["friend_college"] = detailQuery.value("college");
+                chat["friend_grade"] = detailQuery.value("grade");
+            }
+        } else if (friendType == "老师") {
+            detailQuery.prepare("SELECT name, college FROM teachers WHERE teacher_id = ?");
+            detailQuery.addBindValue(friendId);
+            if (detailQuery.exec() && detailQuery.next()) {
+                chat["friend_name"] = detailQuery.value("name");
+                chat["friend_college"] = detailQuery.value("college");
+                chat["friend_grade"] = QString(); // 教师没有年级
+            }
+        }
+
+        // 获取最后一条消息
+        QVariantMap lastMessage = getLastMessage(chat["chat_id"].toInt(), "私聊");
+        if (!lastMessage.isEmpty()) {
+            chat["last_message"] = lastMessage["content"];
+            chat["last_message_time"] = lastMessage["send_time"];
+        }
+
+        chats.append(chat);
+    }
+
+    qDebug() << "用户" << userId << userType << "的私聊数量:" << chats.size();
+    return chats;
+}
+
+bool Database::updatePrivateChatLastMessage(int chatId)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE private_chats SET last_message_time = NOW() WHERE chat_id = ?");
+    query.addBindValue(chatId);
+
+    if (!query.exec()) {
+        qDebug() << "更新私聊最后消息时间失败:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+bool Database::canChat(int user1Id, const QString &user1Type,
+                       int user2Id, const QString &user2Type)
+{
+    // 检查是否为好友关系
+    return areFriends(user1Id, user1Type, user2Id, user2Type);
+}
+
+int Database::sendMessage(int chatId, const QString &chatType,
+                          int senderId, const QString &senderType,
+                          const QString &content)
+{
+    QSqlQuery query;
+    query.prepare("INSERT INTO messages (chat_type, chat_id, sender_id, sender_type, content) "
+                  "VALUES (?, ?, ?, ?, ?)");
+    query.addBindValue(chatType);
+    query.addBindValue(chatId);
+    query.addBindValue(senderId);
+    query.addBindValue(senderType);
+    query.addBindValue(content);
+
+    if (!query.exec()) {
+        qDebug() << "发送消息失败:" << query.lastError().text();
+        return -1;
+    }
+
+    int messageId = query.lastInsertId().toInt();
+
+    // 更新聊天最后消息时间
+    if (chatType == "私聊") {
+        updatePrivateChatLastMessage(chatId);
+    }
+
+    qDebug() << "成功发送消息，message_id:" << messageId;
+    return messageId;
+}
+
+QList<QVariantMap> Database::getChatMessages(int chatId, const QString &chatType,
+                                             int limit, int offset)
+{
+    QList<QVariantMap> messages;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT m.message_id, m.sender_id, m.sender_type, m.content, m.send_time, "
+        "       CASE m.sender_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as sender_name "
+        "FROM messages m "
+        "LEFT JOIN students s ON (m.sender_id = s.student_id AND m.sender_type = '学生') "
+        "LEFT JOIN teachers t ON (m.sender_id = t.teacher_id AND m.sender_type = '老师') "
+        "WHERE m.chat_id = ? AND m.chat_type = ? "
+        "ORDER BY m.send_time DESC "
+        "LIMIT ? OFFSET ?"
+        );
+    query.addBindValue(chatId);
+    query.addBindValue(chatType);
+    query.addBindValue(limit);
+    query.addBindValue(offset);
+
+    if (!query.exec()) {
+        qDebug() << "获取聊天记录失败:" << query.lastError().text();
+        return messages;
+    }
+
+    while (query.next()) {
+        QVariantMap message;
+        message["message_id"] = query.value("message_id");
+        message["sender_id"] = query.value("sender_id");
+        message["sender_type"] = query.value("sender_type");
+        message["sender_name"] = query.value("sender_name");
+        message["content"] = query.value("content");
+        message["send_time"] = query.value("send_time");
+        messages.append(message);
+    }
+
+    // 反转顺序，使最新消息在最后
+    std::reverse(messages.begin(), messages.end());
+
+    qDebug() << "获取到" << messages.size() << "条聊天记录";
+    return messages;
+}
+
+QVariantMap Database::getLastMessage(int chatId, const QString &chatType)
+{
+    QVariantMap lastMessage;
+    QSqlQuery query;
+
+    query.prepare(
+        "SELECT m.message_id, m.sender_id, m.sender_type, m.content, m.send_time, "
+        "       CASE m.sender_type "
+        "           WHEN '学生' THEN s.name "
+        "           WHEN '老师' THEN t.name "
+        "       END as sender_name "
+        "FROM messages m "
+        "LEFT JOIN students s ON (m.sender_id = s.student_id AND m.sender_type = '学生') "
+        "LEFT JOIN teachers t ON (m.sender_id = t.teacher_id AND m.sender_type = '老师') "
+        "WHERE m.chat_id = ? AND m.chat_type = ? "
+        "ORDER BY m.send_time DESC "
+        "LIMIT 1"
+        );
+    query.addBindValue(chatId);
+    query.addBindValue(chatType);
+
+    if (!query.exec()) {
+        qDebug() << "获取最后消息失败:" << query.lastError().text();
+        return lastMessage;
+    }
+
+    if (query.next()) {
+        lastMessage["message_id"] = query.value("message_id");
+        lastMessage["sender_id"] = query.value("sender_id");
+        lastMessage["sender_type"] = query.value("sender_type");
+        lastMessage["sender_name"] = query.value("sender_name");
+        lastMessage["content"] = query.value("content");
+        lastMessage["send_time"] = query.value("send_time");
+    }
+
+    return lastMessage;
+}
+
+bool Database::deleteMessage(int messageId)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM messages WHERE message_id = ?");
+    query.addBindValue(messageId);
+
+    if (!query.exec()) {
+        qDebug() << "删除消息失败:" << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "成功删除消息:" << messageId;
+    return true;
+}
+
+int Database::getUnreadMessageCount(int userId, const QString &userType)
+{
+    // 注意：由于当前数据库设计中没有已读状态字段，
+    // 这里暂时返回0，实际项目中可以扩展消息表添加已读状态
+    // 或者创建单独的已读记录表
+
+    qDebug() << "获取未读消息数量 - 当前版本暂不支持已读状态";
+    return 0;
+}
+
+bool Database::markMessagesAsRead(int chatId, int userId, const QString &userType)
+{
+    // 注意：由于当前数据库设计中没有已读状态字段，
+    // 这里暂时返回true，实际项目中可以扩展消息表添加已读状态
+    // 或者创建单独的已读记录表
+
+    qDebug() << "标记消息为已读 - 当前版本暂不支持已读状态";
+    return true;
 }
