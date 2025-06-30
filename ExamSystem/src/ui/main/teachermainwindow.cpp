@@ -413,6 +413,9 @@ void TeacherMainWindow::createFriendPage()
     connect(m_friendPage, &FriendPage::friendAdded, this, &TeacherMainWindow::onFriendAdded);
     connect(m_friendPage, &FriendPage::friendRemoved, this, &TeacherMainWindow::onFriendRemoved);
     connect(m_friendPage, &FriendPage::requestProcessed, this, &TeacherMainWindow::onRequestProcessed);
+    // 新增：连接好友双击信号
+    connect(m_friendPage, &FriendPage::friendDoubleClicked,
+            this, &TeacherMainWindow::onFriendDoubleClickedToChat);
 
     // 添加到内容栈
     contentStack->addWidget(m_friendPage);
@@ -744,4 +747,39 @@ void TeacherMainWindow::onChatOpened(int friendId, const QString &friendName)
 {
     qDebug() << "教师端打开与" << friendName << "的聊天";
     // 可以在这里添加额外的处理逻辑
+}
+
+// 新增：好友双击切换聊天的槽函数实现
+void TeacherMainWindow::onFriendDoubleClickedToChat(int friendId, const QString &friendType, const QString &friendName)
+{
+    qDebug() << "教师端收到好友双击信号：" << friendName << "(" << friendType << ")" << "ID:" << friendId;
+
+    // 1. 确保聊天页面已创建
+    if (!m_chatPage) {
+        qDebug() << "聊天页面未创建，正在创建...";
+        createChatPage();
+
+        // 如果创建失败，显示错误
+        if (!m_chatPage) {
+            QMessageBox::critical(this, "错误", "无法创建聊天页面，请检查系统设置");
+            return;
+        }
+    }
+
+    // 2. 切换到聊天页面
+    qDebug() << "切换到聊天页面";
+    contentStack->setCurrentWidget(m_chatPage);
+
+    // 3. 更新导航栏选中状态
+    navigationList->setCurrentRow(PAGE_CHAT);
+
+    // 4. 启动与指定好友的聊天
+    qDebug() << "启动与好友的聊天：" << friendName;
+    m_chatPage->startChatFromFriendList(friendId, friendType, friendName);
+
+    // 5. 显示用户反馈（可选）
+    // QMessageBox::information(this, "聊天已开启",
+    //                         QString("已为您打开与 %1 的聊天窗口").arg(friendName));
+
+    qDebug() << "教师端好友双击切换聊天功能执行完成";
 }

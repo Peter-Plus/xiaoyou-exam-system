@@ -45,6 +45,9 @@ signals:
     void friendRemoved(int friendId, const QString &friendType);   // 好友删除信号
     void requestProcessed();         // 申请处理完成信号
 
+    // 新增信号：好友双击时发射
+    void friendDoubleClicked(int friendId, const QString &friendType, const QString &friendName);
+
 private slots:
     // 导航相关
     void onNavigationClicked();

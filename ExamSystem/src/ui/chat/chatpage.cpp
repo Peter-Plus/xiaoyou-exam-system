@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <QEvent>
 #include <QTabWidget>
+#include "groupdetailwidget.h"
 
 // ============================================================================
 // ChatPage 主页面实现 - 修复后的构造函数
@@ -41,6 +42,7 @@ ChatPage::ChatPage(Database *database, int userId, const QString &userType, QWid
     , m_chatWindowWidget(nullptr)
     , m_welcomeLabel(nullptr)
     , m_autoRefreshTimer(nullptr)
+    , m_groupDetailWidget(nullptr)
 {
     setupUI();
     setupStyles();
@@ -220,40 +222,60 @@ void ChatPage::createGroupManageTab()
 {
     m_groupManageTab = new QWidget();
 
-    // 群聊管理组件
+    // 群聊管理组件 - 只占用第二栏，不使用分割器
     m_groupManageWidget = new GroupManageWidget(m_database, m_currentUserId, m_currentUserType, this);
 
     QVBoxLayout *manageLayout = new QVBoxLayout(m_groupManageTab);
     manageLayout->setContentsMargins(0, 0, 0, 0);
     manageLayout->addWidget(m_groupManageWidget);
 
-    // 连接信号
+    // 连接信号 - 群聊选中时在第三栏显示详情
     connect(m_groupManageWidget, &GroupManageWidget::groupRequestProcessed,
             this, &ChatPage::refreshGroupList);
 
+    // 新增：连接群聊选择信号到第三栏显示
+    connect(m_groupManageWidget, &GroupManageWidget::groupSelected,
+            this, &ChatPage::showGroupDetailInThirdColumn);
+    connect(m_groupManageWidget, &GroupManageWidget::noGroupSelected,
+            this, &ChatPage::hideGroupDetailInThirdColumn);
+
     m_tabWidget->addTab(m_groupManageTab, "⚙️ 群聊管理");
 }
-
 
 void ChatPage::onTabChanged(int index)
 {
     qDebug() << "标签页切换到索引:" << index;
 
     QString tabText = m_tabWidget->tabText(index);
+
     if (tabText.contains("私聊")) {
         m_currentChatType = "私聊";
+
+        // 切换到私聊时，清理第三栏的所有组件
+        clearThirdColumn();
+
         if (m_currentGroupId > 0) {
-            showWelcomePage();
             m_currentGroupId = -1;
         }
+
     } else if (tabText.contains("群聊")) {
         m_currentChatType = "群聊";
+
+        // 切换到群聊时，清理第三栏的所有组件
+        clearThirdColumn();
+
         if (m_currentChatId > 0) {
-            showWelcomePage();
             m_currentChatId = -1;
         }
+
         refreshGroupList();
+
     } else if (tabText.contains("管理")) {
+        m_currentChatType = "管理";
+
+        // 切换到群聊管理时，清理第三栏的聊天组件
+        clearThirdColumn();
+
         m_groupManageWidget->refreshData();
     }
 }
@@ -265,6 +287,9 @@ void ChatPage::onGroupChatSelected(int groupId, const QString &groupName)
     m_currentGroupId = groupId;
     m_currentGroupName = groupName;
     m_currentChatType = "群聊";
+
+    // 先清理第三栏的所有组件
+    clearThirdColumn();
 
     // 隐藏欢迎页面，显示聊天窗口
     m_welcomeLabel->hide();
@@ -407,6 +432,10 @@ void ChatPage::onChatSelected(int chatId, int friendId, const QString &friendNam
 
     m_currentChatId = chatId;
     m_currentFriendName = friendName;
+    m_currentChatType = "私聊";
+
+    // 先清理第三栏的所有组件
+    clearThirdColumn();
 
     // 隐藏欢迎页面，显示聊天窗口
     m_welcomeLabel->hide();
@@ -458,9 +487,19 @@ void ChatPage::updateStatistics()
 
 void ChatPage::showWelcomePage()
 {
+    // 确保只显示欢迎页面
     m_welcomeLabel->show();
     m_chatWindowWidget->hide();
     m_chatWindowWidget->clearChat();
+
+    // 如果有群聊详情组件，也要隐藏
+    if (m_groupDetailWidget) {
+        QVBoxLayout *rightLayout = qobject_cast<QVBoxLayout*>(m_rightWidget->layout());
+        if (rightLayout) {
+            rightLayout->removeWidget(m_groupDetailWidget);
+        }
+        m_groupDetailWidget->hide();
+    }
 }
 
 // ============================================================================
@@ -1138,4 +1177,189 @@ void ChatWindowWidget::setupStyles()
     setStyleSheet(styles);
 }
 
+// 新增：显示群聊详情
+void ChatPage::showGroupDetail(int groupId, bool isCreator)
+{
+    qDebug() << "ChatPage显示群聊详情:" << groupId << "是否创建者:" << isCreator;
+
+    if (m_groupDetailWidget) {
+        m_groupDetailWidget->showGroupDetail(groupId, isCreator);
+    }
+}
+
+// 新增：隐藏群聊详情
+void ChatPage::hideGroupDetail()
+{
+    qDebug() << "ChatPage隐藏群聊详情";
+
+    if (m_groupDetailWidget) {
+        m_groupDetailWidget->clearDetail();
+    }
+}
+
+// 新增：群聊被解散
+void ChatPage::onGroupDisbanded(int groupId)
+{
+    qDebug() << "群聊被解散:" << groupId;
+
+    // 刷新群聊管理数据
+    if (m_groupManageWidget) {
+        m_groupManageWidget->refreshData();
+    }
+
+    // 刷新群聊列表
+    refreshGroupList();
+
+    // 如果当前正在群聊中，需要关闭
+    if (m_currentGroupId == groupId) {
+        showWelcomePage();
+        m_currentGroupId = -1;
+        m_currentGroupName = "";
+    }
+}
+
+// 新增：退出群聊
+void ChatPage::onGroupLeft(int groupId)
+{
+    qDebug() << "退出群聊:" << groupId;
+
+    // 刷新群聊管理数据
+    if (m_groupManageWidget) {
+        m_groupManageWidget->refreshData();
+    }
+
+    // 刷新群聊列表
+    refreshGroupList();
+
+    // 如果当前正在这个群聊中，需要关闭
+    if (m_currentGroupId == groupId) {
+        showWelcomePage();
+        m_currentGroupId = -1;
+        m_currentGroupName = "";
+    }
+}
+
+// 新增：邀请成员
+void ChatPage::onMemberInvited(int groupId)
+{
+    qDebug() << "邀请成员到群聊:" << groupId;
+
+    // 刷新群聊详情
+    if (m_groupDetailWidget) {
+        m_groupDetailWidget->refreshGroupInfo();
+    }
+
+    // 刷新群聊管理数据
+    if (m_groupManageWidget) {
+        m_groupManageWidget->refreshData();
+    }
+}
+
+// 新增方法：在第三栏显示群聊详情
+void ChatPage::showGroupDetailInThirdColumn(int groupId, bool isCreator)
+{
+    qDebug() << "在第三栏显示群聊详情:" << groupId << "是否创建者:" << isCreator;
+
+    // 确保群聊详情组件存在
+    if (!m_groupDetailWidget) {
+        m_groupDetailWidget = new GroupDetailWidget(m_database, m_currentUserId, m_currentUserType, this);
+
+        // 连接群聊操作信号
+        connect(m_groupDetailWidget, &GroupDetailWidget::groupDisbanded,
+                this, &ChatPage::onGroupDisbanded);
+        connect(m_groupDetailWidget, &GroupDetailWidget::groupLeft,
+                this, &ChatPage::onGroupLeft);
+        connect(m_groupDetailWidget, &GroupDetailWidget::memberInvited,
+                this, &ChatPage::onMemberInvited);
+    }
+
+    // 先清理第三栏
+    clearThirdColumn();
+
+    // 将群聊详情组件添加到第三栏
+    QVBoxLayout *rightLayout = qobject_cast<QVBoxLayout*>(m_rightWidget->layout());
+    if (rightLayout) {
+        // 隐藏欢迎页面
+        m_welcomeLabel->hide();
+
+        // 添加群聊详情组件
+        rightLayout->addWidget(m_groupDetailWidget);
+        m_groupDetailWidget->show();
+        m_groupDetailWidget->showGroupDetail(groupId, isCreator);
+    }
+}
+
+void ChatPage::hideGroupDetailInThirdColumn()
+{
+    qDebug() << "隐藏第三栏群聊详情";
+    clearThirdColumn();
+}
+
+
+void ChatPage::clearThirdColumn()
+{
+    qDebug() << "清理第三栏组件";
+
+    // 获取右侧布局
+    QVBoxLayout *rightLayout = qobject_cast<QVBoxLayout*>(m_rightWidget->layout());
+    if (!rightLayout) {
+        qWarning() << "无法获取右侧布局";
+        return;
+    }
+
+    // 隐藏聊天窗口并清空聊天
+    if (m_chatWindowWidget) {
+        m_chatWindowWidget->hide();
+        m_chatWindowWidget->clearChat();
+    }
+
+    // 移除并隐藏群聊详情组件
+    if (m_groupDetailWidget) {
+        rightLayout->removeWidget(m_groupDetailWidget);
+        m_groupDetailWidget->hide();
+        m_groupDetailWidget->clearDetail();
+    }
+
+    // 显示欢迎页面
+    m_welcomeLabel->show();
+}
+
+void ChatPage::startChatFromFriendList(int friendId, const QString &friendType, const QString &friendName)
+{
+    qDebug() << "从好友列表启动聊天：" << friendName << "(" << friendType << ")";
+
+    // 1. 切换到私聊标签页
+    for (int i = 0; i < m_tabWidget->count(); ++i) {
+        if (m_tabWidget->tabText(i).contains("私聊")) {
+            m_tabWidget->setCurrentIndex(i);
+            qDebug() << "切换到私聊标签页";
+            break;
+        }
+    }
+
+    // 2. 检查聊天权限
+    if (!m_database->canChat(m_currentUserId, m_currentUserType, friendId, friendType)) {
+        QMessageBox::warning(this, "无法聊天", "只能与好友进行私聊");
+        qDebug() << "聊天权限检查失败";
+        return;
+    }
+
+    // 3. 获取或创建私聊关系
+    int chatId = m_database->getOrCreatePrivateChat(m_currentUserId, m_currentUserType, friendId, friendType);
+    if (chatId <= 0) {
+        QMessageBox::critical(this, "错误", "无法创建聊天关系");
+        qDebug() << "私聊关系创建失败";
+        return;
+    }
+
+    qDebug() << "私聊ID：" << chatId;
+
+    // 4. 刷新聊天列表
+    refreshChatList();
+
+    // 5. 自动选择该聊天并打开聊天窗口
+    onChatSelected(chatId, friendId, friendName);
+
+    qDebug() << "好友聊天启动完成";
+}
 #include "chatpage.moc"

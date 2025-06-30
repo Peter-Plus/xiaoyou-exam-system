@@ -241,6 +241,10 @@ public:
     bool canManageGroup(int groupId, int userId, const QString &userType);
     QVariantMap getGroupInfo(int groupId);
 
+    // 群聊操作方法
+    bool disbandGroup(int groupId, int userId, const QString &userType);
+    bool leaveGroup(int groupId, int userId, const QString &userType);
+
 
 private:
     QSqlDatabase db;

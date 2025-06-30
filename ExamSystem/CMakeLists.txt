@@ -138,6 +138,11 @@ set(PROJECT_SOURCES
             src/ui/chat/joingroupdialog.cpp
             src/ui/chat/groupmanagewidget.h
             src/ui/chat/groupmanagewidget.cpp
+            src/ui/chat/groupdetailwidget.h
+            src/ui/chat/groupdetailwidget.cpp
+            src/ui/chat/invitememberdialog.h
+            src/ui/chat/invitememberdialog.cpp
+
 
 )
 

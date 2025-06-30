@@ -453,10 +453,8 @@ void MessageBubbleWidget::updateGroupChatStyles()
 // 新增私有方法：更新头部可见性
 void MessageBubbleWidget::updateHeaderVisibility()
 {
-    // 在私聊模式下，可以选择隐藏头部信息以节省空间
-    // 在群聊模式下，必须显示头部信息以区分发送者
-    bool shouldShowHeader = m_isGroupChat || (!m_isFromMe); // 群聊或收到的消息显示头部
-    m_headerWidget->setVisible(shouldShowHeader);
+    // 所有消息都显示头部信息，保持一致的用户体验
+    m_headerWidget->setVisible(true);
 }
 
 // 新增私有方法：设置初始样式

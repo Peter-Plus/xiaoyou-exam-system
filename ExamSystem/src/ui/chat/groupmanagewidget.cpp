@@ -16,59 +16,41 @@ GroupManageWidget::GroupManageWidget(Database *database, int userId, const QStri
 
 void GroupManageWidget::setupUI()
 {
-    m_mainLayout = new QHBoxLayout(this);
+    m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setContentsMargins(8, 8, 8, 8);
-    m_mainLayout->setSpacing(8);
+    m_mainLayout->setSpacing(12);
 
-    m_splitter = new QSplitter(Qt::Horizontal, this);
-    m_mainLayout->addWidget(m_splitter);
-
-    // 左侧管理区域
-    m_leftWidget = new QWidget();
-    m_leftWidget->setMinimumWidth(350);
-    m_leftWidget->setMaximumWidth(500);
-
-    m_leftLayout = new QVBoxLayout(m_leftWidget);
-    m_leftLayout->setContentsMargins(8, 8, 8, 8);
-    m_leftLayout->setSpacing(12);
-
-    // 我创建的群聊
+    // 我创建的群聊 - 移除管理按钮
     m_createdGroupsBox = new QGroupBox("📋 我创建的群聊");
     QVBoxLayout *createdLayout = new QVBoxLayout(m_createdGroupsBox);
 
     m_createdGroupsList = new QListWidget();
-    m_createdGroupsList->setMaximumHeight(150);
     m_createdGroupsList->setObjectName("createdGroupsList");
-
-    m_manageCreatedButton = new QPushButton("管理选中群聊");
-    m_manageCreatedButton->setObjectName("manageButton");
-    m_manageCreatedButton->setEnabled(false);
+    // 增加高度，因为不需要为按钮预留空间
+    m_createdGroupsList->setMinimumHeight(180);
 
     createdLayout->addWidget(m_createdGroupsList);
-    createdLayout->addWidget(m_manageCreatedButton);
+    // 移除：createdLayout->addWidget(m_manageCreatedButton);
 
-    // 我加入的群聊
+    // 我加入的群聊 - 移除查看按钮
     m_joinedGroupsBox = new QGroupBox("👥 我加入的群聊");
     QVBoxLayout *joinedLayout = new QVBoxLayout(m_joinedGroupsBox);
 
     m_joinedGroupsList = new QListWidget();
-    m_joinedGroupsList->setMaximumHeight(150);
     m_joinedGroupsList->setObjectName("joinedGroupsList");
-
-    m_manageJoinedButton = new QPushButton("查看群聊详情");
-    m_manageJoinedButton->setObjectName("manageButton");
-    m_manageJoinedButton->setEnabled(false);
+    // 增加高度，因为不需要为按钮预留空间
+    m_joinedGroupsList->setMinimumHeight(180);
 
     joinedLayout->addWidget(m_joinedGroupsList);
-    joinedLayout->addWidget(m_manageJoinedButton);
+    // 移除：joinedLayout->addWidget(m_manageJoinedButton);
 
     // 待处理申请
     m_requestsBox = new QGroupBox("📮 待处理申请");
     QVBoxLayout *requestsLayout = new QVBoxLayout(m_requestsBox);
 
     m_requestsList = new QListWidget();
-    m_requestsList->setMaximumHeight(200);
     m_requestsList->setObjectName("requestsList");
+    m_requestsList->setMinimumHeight(200);
 
     m_requestButtonsLayout = new QHBoxLayout();
     m_acceptButton = new QPushButton("✅ 同意");
@@ -90,55 +72,20 @@ void GroupManageWidget::setupUI()
     m_statisticsLabel->setObjectName("statisticsLabel");
     m_statisticsLabel->setAlignment(Qt::AlignCenter);
 
-    // 组装左侧布局
-    m_leftLayout->addWidget(m_createdGroupsBox);
-    m_leftLayout->addWidget(m_joinedGroupsBox);
-    m_leftLayout->addWidget(m_requestsBox);
-    m_leftLayout->addWidget(m_statisticsLabel);
-    m_leftLayout->addStretch();
+    // 组装主布局 - 移除分割器
+    m_mainLayout->addWidget(m_createdGroupsBox);
+    m_mainLayout->addWidget(m_joinedGroupsBox);
+    m_mainLayout->addWidget(m_requestsBox);
+    m_mainLayout->addWidget(m_statisticsLabel);
+    m_mainLayout->addStretch();
 
-    // 右侧详情区域
-    m_rightWidget = new QWidget();
-    m_rightLayout = new QVBoxLayout(m_rightWidget);
-    m_rightLayout->setContentsMargins(8, 8, 8, 8);
-
-    m_detailsArea = new QScrollArea();
-    m_detailsArea->setWidgetResizable(true);
-    m_detailsArea->setObjectName("detailsArea");
-
-    m_detailsContent = new QWidget();
-    m_detailsLayout = new QVBoxLayout(m_detailsContent);
-    m_detailsLayout->setContentsMargins(16, 16, 16, 16);
-
-    m_detailsLabel = new QLabel("选择左侧的群聊或申请查看详细信息");
-    m_detailsLabel->setAlignment(Qt::AlignCenter);
-    m_detailsLabel->setObjectName("detailsLabel");
-
-    m_detailsLayout->addWidget(m_detailsLabel);
-    m_detailsLayout->addStretch();
-
-    m_detailsArea->setWidget(m_detailsContent);
-    m_rightLayout->addWidget(m_detailsArea);
-
-    // 添加到分割器
-    m_splitter->addWidget(m_leftWidget);
-    m_splitter->addWidget(m_rightWidget);
-    m_splitter->setStretchFactor(0, 0);
-    m_splitter->setStretchFactor(1, 1);
-    m_splitter->setSizes({400, 600});
-
-    // 连接信号
+    // 连接信号 - 移除按钮相关的连接
     connect(m_createdGroupsList, &QListWidget::itemClicked,
             this, &GroupManageWidget::onCreatedGroupClicked);
     connect(m_joinedGroupsList, &QListWidget::itemClicked,
             this, &GroupManageWidget::onJoinedGroupClicked);
     connect(m_requestsList, &QListWidget::itemClicked,
             this, &GroupManageWidget::onRequestsClicked);
-
-    connect(m_manageCreatedButton, &QPushButton::clicked,
-            this, &GroupManageWidget::onManageGroupClicked);
-    connect(m_manageJoinedButton, &QPushButton::clicked,
-            this, &GroupManageWidget::onManageGroupClicked);
 
     connect(m_acceptButton, &QPushButton::clicked,
             this, &GroupManageWidget::onAcceptRequestClicked);
@@ -150,13 +97,13 @@ void GroupManageWidget::setupStyles()
 {
     QString styles = R"(
         QWidget {
-            background-color: #f5f5f5;
+            background-color: #f8f9fa;
             font-family: 'Microsoft YaHei', Arial, sans-serif;
         }
 
         QGroupBox {
             font-weight: bold;
-            border: 2px solid #ddd;
+            border: 2px solid #e9ecef;
             border-radius: 8px;
             margin-top: 8px;
             padding-top: 8px;
@@ -167,134 +114,118 @@ void GroupManageWidget::setupStyles()
             subcontrol-origin: margin;
             left: 10px;
             padding: 0 8px 0 8px;
+            color: #495057;
         }
 
         #createdGroupsList {
-            background-color: white;
-            border: 1px solid #ddd;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
             border-radius: 4px;
         }
 
         #createdGroupsList::item {
-            padding: 8px;
-            border-bottom: 1px solid #f0f0f0;
+            padding: 10px;
+            border-bottom: 1px solid #e9ecef;
+            min-height: 40px;
         }
 
         #createdGroupsList::item:selected {
-            background-color: #e8f5e8;
-            border-left: 3px solid #4CAF50;
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            font-weight: bold;
+        }
+
+        #createdGroupsList::item:hover {
+            background-color: #e9ecef;
         }
 
         #joinedGroupsList {
-            background-color: white;
-            border: 1px solid #ddd;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
             border-radius: 4px;
         }
 
         #joinedGroupsList::item {
-            padding: 8px;
-            border-bottom: 1px solid #f0f0f0;
+            padding: 10px;
+            border-bottom: 1px solid #e9ecef;
+            min-height: 40px;
         }
 
         #joinedGroupsList::item:selected {
-            background-color: #e3f2fd;
-            border-left: 3px solid #2196F3;
+            background-color: #cce5ff;
+            border-left: 4px solid #007bff;
+            font-weight: bold;
+        }
+
+        #joinedGroupsList::item:hover {
+            background-color: #e9ecef;
         }
 
         #requestsList {
-            background-color: white;
-            border: 1px solid #ddd;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
             border-radius: 4px;
         }
 
         #requestsList::item {
-            padding: 8px;
-            border-bottom: 1px solid #f0f0f0;
+            padding: 10px;
+            border-bottom: 1px solid #e9ecef;
+            min-height: 50px;
         }
 
         #requestsList::item:selected {
-            background-color: #fff3e0;
-            border-left: 3px solid #FF9800;
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            font-weight: bold;
         }
 
-        #manageButton {
-            background-color: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 8px 16px;
-            font-size: 12px;
-        }
-
-        #manageButton:hover {
-            background-color: #1976D2;
-        }
-
-        #manageButton:disabled {
-            background-color: #cccccc;
+        #requestsList::item:hover {
+            background-color: #e9ecef;
         }
 
         #acceptButton {
-            background-color: #4CAF50;
+            background-color: #28a745;
             color: white;
             border: none;
-            border-radius: 4px;
-            padding: 8px 16px;
-            font-size: 12px;
+            border-radius: 6px;
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: bold;
         }
 
         #acceptButton:hover {
-            background-color: #45a049;
+            background-color: #218838;
         }
 
         #acceptButton:disabled {
-            background-color: #cccccc;
+            background-color: #6c757d;
         }
 
         #rejectButton {
-            background-color: #f44336;
+            background-color: #dc3545;
             color: white;
             border: none;
-            border-radius: 4px;
-            padding: 8px 16px;
-            font-size: 12px;
+            border-radius: 6px;
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: bold;
         }
 
         #rejectButton:hover {
-            background-color: #d32f2f;
+            background-color: #c82333;
         }
 
         #rejectButton:disabled {
-            background-color: #cccccc;
+            background-color: #6c757d;
         }
 
         #statisticsLabel {
             background-color: white;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            padding: 12px;
-            font-size: 12px;
-            color: #666;
-        }
-
-        #detailsArea {
-            background-color: white;
-            border: 1px solid #ddd;
+            border: 1px solid #dee2e6;
             border-radius: 8px;
-        }
-
-        #detailsLabel {
-            color: #999;
-            font-size: 16px;
-        }
-
-        QSplitter::handle {
-            background-color: #ddd;
-            width: 2px;
-        }
-
-        QSplitter::handle:hover {
-            background-color: #bbb;
+            padding: 16px;
+            font-size: 14px;
+            color: #495057;
         }
     )";
 
@@ -309,7 +240,76 @@ void GroupManageWidget::refreshData()
     loadJoinedGroups();
     loadPendingRequests();
     updateStatistics();
-    clearGroupDetails();
+
+    // 清除选择状态
+    clearSelection();
+}
+
+void GroupManageWidget::clearSelection()
+{
+    m_createdGroupsList->clearSelection();
+    m_joinedGroupsList->clearSelection();
+    m_requestsList->clearSelection();
+
+    m_selectedGroupId = -1;
+    m_selectedRequestId = -1;
+
+    m_acceptButton->setEnabled(false);
+    m_rejectButton->setEnabled(false);
+
+    emit noGroupSelected();
+}
+
+void GroupManageWidget::onCreatedGroupClicked()
+{
+    QListWidgetItem *item = m_createdGroupsList->currentItem();
+    if (!item) return;
+
+    m_selectedGroupId = item->data(Qt::UserRole).toInt();
+
+    // 清除其他选择
+    m_joinedGroupsList->clearSelection();
+    m_requestsList->clearSelection();
+    m_acceptButton->setEnabled(false);
+    m_rejectButton->setEnabled(false);
+
+    qDebug() << "选择我创建的群聊:" << m_selectedGroupId;
+    emit groupSelected(m_selectedGroupId, true);  // true表示是创建者
+}
+
+void GroupManageWidget::onJoinedGroupClicked()
+{
+    QListWidgetItem *item = m_joinedGroupsList->currentItem();
+    if (!item) return;
+
+    m_selectedGroupId = item->data(Qt::UserRole).toInt();
+
+    // 清除其他选择
+    m_createdGroupsList->clearSelection();
+    m_requestsList->clearSelection();
+    m_acceptButton->setEnabled(false);
+    m_rejectButton->setEnabled(false);
+
+    qDebug() << "选择我加入的群聊:" << m_selectedGroupId;
+    emit groupSelected(m_selectedGroupId, false);  // false表示是普通成员
+}
+
+void GroupManageWidget::onRequestsClicked()
+{
+    QListWidgetItem *item = m_requestsList->currentItem();
+    if (!item) return;
+
+    m_selectedRequestId = item->data(Qt::UserRole).toInt();
+    m_selectedGroupId = item->data(Qt::UserRole + 1).toInt();
+    m_acceptButton->setEnabled(true);
+    m_rejectButton->setEnabled(true);
+
+    // 清除其他选择
+    m_createdGroupsList->clearSelection();
+    m_joinedGroupsList->clearSelection();
+
+    qDebug() << "选择申请:" << m_selectedRequestId;
+    emit noGroupSelected();  // 申请详情暂时不在第三栏显示，可以后续扩展
 }
 
 void GroupManageWidget::loadCreatedGroups()
@@ -323,7 +323,7 @@ void GroupManageWidget::loadCreatedGroups()
         if (group["user_role"].toString() == "创建者") {
             m_createdGroups.append(group);
 
-            QString itemText = QString("%1 (%2人)")
+            QString itemText = QString("%1\n成员: %2人")
                                    .arg(group["group_name"].toString())
                                    .arg(group["member_count"].toInt());
 
@@ -347,7 +347,7 @@ void GroupManageWidget::loadJoinedGroups()
         if (group["user_role"].toString() == "成员") {
             m_joinedGroups.append(group);
 
-            QString itemText = QString("%1 (%2人)\n创建者: %3")
+            QString itemText = QString("%1\n成员: %2人 · 创建者: %3")
                                    .arg(group["group_name"].toString())
                                    .arg(group["member_count"].toInt())
                                    .arg(group["creator_name"].toString());
@@ -374,8 +374,9 @@ void GroupManageWidget::loadPendingRequests()
         for (const QVariantMap &request : requests) {
             m_pendingRequests.append(request);
 
-            QString itemText = QString("%1 申请加入\n群聊: %2\n时间: %3")
+            QString itemText = QString("%1 (%2) 申请加入\n群聊: %3\n时间: %4")
                                    .arg(request["requester_name"].toString())
+                                   .arg(request["requester_type"].toString())
                                    .arg(group["group_name"].toString())
                                    .arg(request["request_time"].toDateTime().toString("MM-dd hh:mm"));
 
@@ -391,87 +392,12 @@ void GroupManageWidget::loadPendingRequests()
 
 void GroupManageWidget::updateStatistics()
 {
-    QString statsText = QString("我创建的群聊: %1个\n我加入的群聊: %2个\n待处理申请: %3条")
+    QString statsText = QString("📋 我创建的群聊: %1个\n👥 我加入的群聊: %2个\n📮 待处理申请: %3条")
                             .arg(m_createdGroups.size())
                             .arg(m_joinedGroups.size())
                             .arg(m_pendingRequests.size());
 
     m_statisticsLabel->setText(statsText);
-}
-
-void GroupManageWidget::onCreatedGroupClicked()
-{
-    QListWidgetItem *item = m_createdGroupsList->currentItem();
-    if (!item) return;
-
-    m_selectedGroupId = item->data(Qt::UserRole).toInt();
-    m_manageCreatedButton->setEnabled(true);
-
-    // 清除其他选择
-    m_joinedGroupsList->clearSelection();
-    m_requestsList->clearSelection();
-    m_manageJoinedButton->setEnabled(false);
-    m_acceptButton->setEnabled(false);
-    m_rejectButton->setEnabled(false);
-
-    showGroupDetails(m_selectedGroupId);
-}
-
-void GroupManageWidget::onJoinedGroupClicked()
-{
-    QListWidgetItem *item = m_joinedGroupsList->currentItem();
-    if (!item) return;
-
-    m_selectedGroupId = item->data(Qt::UserRole).toInt();
-    m_manageJoinedButton->setEnabled(true);
-
-    // 清除其他选择
-    m_createdGroupsList->clearSelection();
-    m_requestsList->clearSelection();
-    m_manageCreatedButton->setEnabled(false);
-    m_acceptButton->setEnabled(false);
-    m_rejectButton->setEnabled(false);
-
-    showGroupDetails(m_selectedGroupId);
-}
-
-void GroupManageWidget::onRequestsClicked()
-{
-    QListWidgetItem *item = m_requestsList->currentItem();
-    if (!item) return;
-
-    m_selectedRequestId = item->data(Qt::UserRole).toInt();
-    m_selectedGroupId = item->data(Qt::UserRole + 1).toInt();
-    m_acceptButton->setEnabled(true);
-    m_rejectButton->setEnabled(true);
-
-    // 清除其他选择
-    m_createdGroupsList->clearSelection();
-    m_joinedGroupsList->clearSelection();
-    m_manageCreatedButton->setEnabled(false);
-    m_manageJoinedButton->setEnabled(false);
-
-    // 显示申请详情
-    for (const QVariantMap &request : m_pendingRequests) {
-        if (request["request_id"].toInt() == m_selectedRequestId) {
-            QString detailsText = QString(
-                                      "<h3>加群申请详情</h3>"
-                                      "<p><b>申请者:</b> %1 %2</p>"
-                                      "<p><b>申请者学院:</b> %3</p>"
-                                      "<p><b>申请时间:</b> %4</p>"
-                                      "<p><b>申请群聊:</b> %5</p>"
-                                      "<hr>"
-                                      "<p>请审核此申请，选择同意或拒绝。</p>"
-                                      ).arg(request["requester_name"].toString())
-                                      .arg(request["requester_type"].toString())
-                                      .arg(request["requester_college"].toString())
-                                      .arg(request["request_time"].toDateTime().toString("yyyy-MM-dd hh:mm:ss"))
-                                      .arg(findGroupName(m_selectedGroupId));
-
-            m_detailsLabel->setText(detailsText);
-            break;
-        }
-    }
 }
 
 void GroupManageWidget::onAcceptRequestClicked()
@@ -512,71 +438,6 @@ void GroupManageWidget::onRejectRequestClicked()
             QMessageBox::critical(this, "操作失败", "处理申请失败，请重试");
         }
     }
-}
-
-void GroupManageWidget::onManageGroupClicked()
-{
-    if (m_selectedGroupId <= 0) return;
-
-    // 这里可以打开群聊设置对话框
-    // 暂时显示消息框
-    QMessageBox::information(this, "群聊管理",
-                             QString("群聊管理功能开发中...\n群聊ID: %1").arg(m_selectedGroupId));
-}
-
-void GroupManageWidget::showGroupDetails(int groupId)
-{
-    QVariantMap groupInfo = m_database->getGroupInfo(groupId);
-    if (groupInfo.isEmpty()) return;
-
-    QList<QVariantMap> members = m_database->getGroupMembers(groupId);
-
-    QString detailsText = QString(
-                              "<h3>群聊详情</h3>"
-                              "<p><b>群聊名称:</b> %1</p>"
-                              "<p><b>群聊ID:</b> %2</p>"
-                              "<p><b>创建者:</b> %3 %4</p>"
-                              "<p><b>成员数量:</b> %5人</p>"
-                              "<p><b>创建时间:</b> %6</p>"
-                              "<hr>"
-                              "<h4>群聊成员</h4>"
-                              ).arg(groupInfo["group_name"].toString())
-                              .arg(groupInfo["group_id"].toInt())
-                              .arg(groupInfo["creator_name"].toString())
-                              .arg(groupInfo["creator_type"].toString())
-                              .arg(groupInfo["member_count"].toInt())
-                              .arg(groupInfo["created_time"].toDateTime().toString("yyyy-MM-dd hh:mm"));
-
-    for (const QVariantMap &member : members) {
-        QString memberText = QString("<p>• %1 %2 (%3)</p>")
-                                 .arg(member["user_name"].toString())
-                                 .arg(member["user_type"].toString())
-                                 .arg(member["role"].toString());
-        detailsText += memberText;
-    }
-
-    m_detailsLabel->setText(detailsText);
-}
-
-void GroupManageWidget::clearGroupDetails()
-{
-    m_detailsLabel->setText("选择左侧的群聊或申请查看详细信息");
-    m_selectedGroupId = -1;
-    m_selectedRequestId = -1;
-}
-
-void GroupManageWidget::onRequestItemClicked()
-{
-    // 这个方法的功能已经在onRequestsClicked中实现
-    // 保持空实现以满足链接器要求
-    qDebug() << "onRequestItemClicked called";
-}
-
-void GroupManageWidget::onGroupItemClicked()
-{
-    // 这个方法的功能已经在onCreatedGroupClicked和onJoinedGroupClicked中实现
-    // 保持空实现以满足链接器要求
-    qDebug() << "onGroupItemClicked called";
 }
 
 QString GroupManageWidget::findGroupName(int groupId)

@@ -40,6 +40,8 @@ private slots:
     // 聊天相关槽函数
     void onMessageSent(int chatId);
     void onChatOpened(int friendId, const QString &friendName);
+    // 新增：处理好友双击事件的槽函数
+    void onFriendDoubleClickedToChat(int friendId, const QString &friendType, const QString &friendName);
 
 
 private:

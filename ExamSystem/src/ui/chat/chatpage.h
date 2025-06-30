@@ -26,6 +26,7 @@ class ChatWindowWidget;
 class MessageBubbleWidget;
 class GroupListWidget;
 class GroupManageWidget;
+class GroupDetailWidget;
 
 class ChatPage : public QWidget
 {
@@ -43,6 +44,8 @@ public:
     // 新增群聊方法
     void openGroupChat(int groupId, const QString &groupName);
     void refreshGroupList();
+    // 新增：从好友页面启动聊天的专用方法
+    void startChatFromFriendList(int friendId, const QString &friendType, const QString &friendName);
 
 public slots:
     void onChatSelected(int chatId, int friendId, const QString &friendName);
@@ -55,6 +58,15 @@ public slots:
     void onTabChanged(int index);
     void onCreateGroupClicked();
     void onJoinGroupClicked();
+
+    // 新增：群聊管理相关槽函数
+    void showGroupDetail(int groupId, bool isCreator);
+    void hideGroupDetail();
+    void onGroupDisbanded(int groupId);
+    void onGroupLeft(int groupId);
+    void onMemberInvited(int groupId);
+    void showGroupDetailInThirdColumn(int groupId, bool isCreator);
+    void hideGroupDetailInThirdColumn();
 
 signals:
     void messageSent(int chatId);
@@ -70,6 +82,11 @@ private:
     void setupStyles();
     void connectSignals();
     void showWelcomePage();
+    void clearThirdColumn();  // 清理第三栏的所有组件
+
+    void updateGroupManageTabLayout();
+
+    GroupDetailWidget *m_groupDetailWidget;  // 新增：群聊详情组件
 
     // 新增私有方法
     void setupTabWidget();

@@ -4,12 +4,10 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QScrollArea>
 #include <QGroupBox>
 #include <QListWidget>
 #include <QPushButton>
 #include <QLabel>
-#include <QSplitter>
 #include <QMessageBox>
 #include "../../core/database.h"
 
@@ -26,13 +24,12 @@ public slots:
     void onCreatedGroupClicked();
     void onJoinedGroupClicked();
     void onRequestsClicked();
-    void onGroupItemClicked();
-    void onRequestItemClicked();
     void onAcceptRequestClicked();
     void onRejectRequestClicked();
-    void onManageGroupClicked();
 
 signals:
+    void groupSelected(int groupId, bool isCreator);  // 新增：群聊被选中
+    void noGroupSelected();                           // 新增：取消选中
     void groupRequestProcessed();
 
 private:
@@ -42,30 +39,27 @@ private:
     void loadJoinedGroups();
     void loadPendingRequests();
     void updateStatistics();
-    void showGroupDetails(int groupId);
-    void clearGroupDetails();
-    QString findGroupName(int groupId);  // 添加这个方法声明
+    void clearSelection();  // 新增：清除所有选择
+    QString findGroupName(int groupId);
 
     Database *m_database;
     int m_currentUserId;
     QString m_currentUserType;
 
-    // UI组件
-    QHBoxLayout *m_mainLayout;
-    QSplitter *m_splitter;
+    // UI组件 - 移除分割器和右侧区域
+    QVBoxLayout *m_mainLayout;
 
-    // 左侧管理区域
-    QWidget *m_leftWidget;
-    QVBoxLayout *m_leftLayout;
-
+    // 我创建的群聊
     QGroupBox *m_createdGroupsBox;
     QListWidget *m_createdGroupsList;
-    QPushButton *m_manageCreatedButton;
+    // 移除：QPushButton *m_manageCreatedButton;
 
+    // 我加入的群聊
     QGroupBox *m_joinedGroupsBox;
     QListWidget *m_joinedGroupsList;
-    QPushButton *m_manageJoinedButton;
+    // 移除：QPushButton *m_manageJoinedButton;
 
+    // 待处理申请
     QGroupBox *m_requestsBox;
     QListWidget *m_requestsList;
     QHBoxLayout *m_requestButtonsLayout;
@@ -73,14 +67,6 @@ private:
     QPushButton *m_rejectButton;
 
     QLabel *m_statisticsLabel;
-
-    // 右侧详情区域
-    QWidget *m_rightWidget;
-    QVBoxLayout *m_rightLayout;
-    QScrollArea *m_detailsArea;
-    QWidget *m_detailsContent;
-    QVBoxLayout *m_detailsLayout;
-    QLabel *m_detailsLabel;
 
     // 状态
     int m_selectedGroupId;

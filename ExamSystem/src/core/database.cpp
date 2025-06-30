@@ -2445,27 +2445,28 @@ QList<QVariantMap> Database::searchUsersByKeyword(const QString &keyword, int cu
         QVariantMap user;
         user["user_id"] = query.value("user_id");
         user["user_type"] = query.value("user_type");
-        user["name"] = query.value("name");
-        user["college"] = query.value("college");
-        user["grade"] = query.value("grade");
+        user["user_name"] = query.value("name");      // 修改：改为 user_name
+        user["user_college"] = query.value("college"); // 修改：改为 user_college
+        user["user_grade"] = query.value("grade");     // 修改：改为 user_grade
 
         // 检查关系状态
         int userId = user["user_id"].toInt();
         QString userType = user["user_type"].toString();
 
         if (areFriends(currentUserId, currentUserType, userId, userType)) {
-            user["relationship"] = "已是好友";
+            user["relationship_status"] = "已是好友";   // 修改：改为 relationship_status
         } else if (hasPendingFriendRequest(currentUserId, currentUserType, userId, userType)) {
-            user["relationship"] = "已发送请求";
+            user["relationship_status"] = "已发送请求"; // 修改：改为 relationship_status
         } else if (hasPendingFriendRequest(userId, userType, currentUserId, currentUserType)) {
-            user["relationship"] = "待处理请求";
+            user["relationship_status"] = "待处理请求"; // 修改：改为 relationship_status
         } else {
-            user["relationship"] = "可添加";
+            user["relationship_status"] = "可添加";     // 修改：改为 relationship_status
         }
 
         users.append(user);
     }
 
+    qDebug() << "搜索用户完成，关键词:" << keyword << "找到" << users.size() << "个用户";
     return users;
 }
 
@@ -2483,25 +2484,26 @@ QList<QVariantMap> Database::searchUsersById(int userId, int currentUserId, cons
         QVariantMap user;
         user["user_id"] = query.value("user_id");
         user["user_type"] = query.value("user_type");
-        user["name"] = query.value("name");
-        user["college"] = query.value("college");
-        user["grade"] = query.value("grade");
+        user["user_name"] = query.value("name");      // 修改：改为 user_name
+        user["user_college"] = query.value("college"); // 修改：改为 user_college
+        user["user_grade"] = query.value("grade");     // 修改：改为 user_grade
 
         // 添加关系状态检查
         int searchUserId = user["user_id"].toInt();
         QString searchUserType = user["user_type"].toString();
 
         if (areFriends(currentUserId, currentUserType, searchUserId, searchUserType)) {
-            user["relationship"] = "已是好友";
+            user["relationship_status"] = "已是好友";   // 修改：改为 relationship_status
         } else if (hasPendingFriendRequest(currentUserId, currentUserType, searchUserId, searchUserType)) {
-            user["relationship"] = "已发送请求";
+            user["relationship_status"] = "已发送请求"; // 修改：改为 relationship_status
         } else if (hasPendingFriendRequest(searchUserId, searchUserType, currentUserId, currentUserType)) {
-            user["relationship"] = "待处理请求";
+            user["relationship_status"] = "待处理请求"; // 修改：改为 relationship_status
         } else {
-            user["relationship"] = "可添加";
+            user["relationship_status"] = "可添加";     // 修改：改为 relationship_status
         }
 
         users.append(user);
+        qDebug() << "按ID搜索学生成功:" << userId;
         return users;
     }
 
@@ -2514,25 +2516,26 @@ QList<QVariantMap> Database::searchUsersById(int userId, int currentUserId, cons
         QVariantMap user;
         user["user_id"] = query.value("user_id");
         user["user_type"] = query.value("user_type");
-        user["name"] = query.value("name");
-        user["college"] = query.value("college");
-        user["grade"] = query.value("grade");
+        user["user_name"] = query.value("name");      // 修改：改为 user_name
+        user["user_college"] = query.value("college"); // 修改：改为 user_college
+        user["user_grade"] = query.value("grade");     // 修改：改为 user_grade
 
         // 添加关系状态检查
         int searchUserId = user["user_id"].toInt();
         QString searchUserType = user["user_type"].toString();
 
         if (areFriends(currentUserId, currentUserType, searchUserId, searchUserType)) {
-            user["relationship"] = "已是好友";
+            user["relationship_status"] = "已是好友";   // 修改：改为 relationship_status
         } else if (hasPendingFriendRequest(currentUserId, currentUserType, searchUserId, searchUserType)) {
-            user["relationship"] = "已发送请求";
+            user["relationship_status"] = "已发送请求"; // 修改：改为 relationship_status
         } else if (hasPendingFriendRequest(searchUserId, searchUserType, currentUserId, currentUserType)) {
-            user["relationship"] = "待处理请求";
+            user["relationship_status"] = "待处理请求"; // 修改：改为 relationship_status
         } else {
-            user["relationship"] = "可添加";
+            user["relationship_status"] = "可添加";     // 修改：改为 relationship_status
         }
 
         users.append(user);
+        qDebug() << "按ID搜索教师成功:" << userId;
     }
 
     return users;
@@ -3298,18 +3301,21 @@ QList<QVariantMap> Database::getGroupMembers(int groupId)
 
 bool Database::isGroupMember(int groupId, int userId, const QString &userType)
 {
-    QSqlQuery query;
-    query.prepare("SELECT COUNT(*) FROM group_members "
-                  "WHERE group_id = ? AND user_id = ? AND user_type = ?");
-    query.addBindValue(groupId);
-    query.addBindValue(userId);
-    query.addBindValue(userType);
-
-    if (!query.exec() || !query.next()) {
+    if (!QSqlDatabase::database().isOpen()) {  // 修改：使用静态方法
         return false;
     }
 
-    return query.value(0).toInt() > 0;
+    QSqlQuery query;  // 修改：不指定数据库连接
+    query.prepare("SELECT COUNT(*) as count FROM group_members WHERE group_id = ? AND user_id = ? AND user_type = ?");
+    query.bindValue(0, groupId);
+    query.bindValue(1, userId);
+    query.bindValue(2, userType);
+
+    if (query.exec() && query.next()) {
+        return query.value("count").toInt() > 0;
+    }
+
+    return false;
 }
 
 int Database::getGroupMemberCount(int groupId)
@@ -3571,4 +3577,195 @@ QVariantMap Database::getGroupInfo(int groupId)
     groupInfo["created_time"] = query.value("created_time");
 
     return groupInfo;
+}
+
+bool Database::disbandGroup(int groupId, int userId, const QString &userType)
+{
+    qDebug() << "解散群聊:" << groupId << "操作者:" << userId << userType;
+
+    // 修改：使用静态数据库连接，与 addGroupMember 保持一致
+    if (!QSqlDatabase::database().isOpen()) {
+        qWarning() << "数据库未连接";
+        return false;
+    }
+
+    QSqlQuery query;  // 修改：不指定数据库连接，使用默认连接
+
+    // 检查是否为群聊创建者
+    query.prepare("SELECT creator_id, creator_type FROM group_chats WHERE group_id = ?");
+    query.bindValue(0, groupId);
+
+    if (!query.exec()) {
+        qWarning() << "检查群聊创建者失败:" << query.lastError().text();
+        return false;
+    }
+
+    if (!query.next()) {
+        qWarning() << "群聊不存在:" << groupId;
+        return false;
+    }
+
+    int creatorId = query.value("creator_id").toInt();
+    QString creatorType = query.value("creator_type").toString();
+
+    if (creatorId != userId || creatorType != userType) {
+        qWarning() << "只有创建者可以解散群聊";
+        qWarning() << "期望创建者:" << creatorId << creatorType;
+        qWarning() << "实际操作者:" << userId << userType;
+        return false;
+    }
+
+    // 开始事务 - 修改：使用静态方法
+    if (!QSqlDatabase::database().transaction()) {
+        qWarning() << "开始事务失败";
+        return false;
+    }
+
+    bool success = true;
+
+    // 1. 删除群聊成员
+    query.prepare("DELETE FROM group_members WHERE group_id = ?");
+    query.bindValue(0, groupId);
+    if (!query.exec()) {
+        qWarning() << "删除群聊成员失败:" << query.lastError().text();
+        success = false;
+    }
+
+    // 2. 删除群聊申请
+    if (success) {
+        query.prepare("DELETE FROM group_requests WHERE group_id = ?");
+        query.bindValue(0, groupId);
+        if (!query.exec()) {
+            qWarning() << "删除群聊申请失败:" << query.lastError().text();
+            success = false;
+        }
+    }
+
+    // 3. 删除群聊消息
+    if (success) {
+        query.prepare("DELETE FROM messages WHERE chat_type = '群聊' AND chat_id = ?");
+        query.bindValue(0, groupId);
+        if (!query.exec()) {
+            qWarning() << "删除群聊消息失败:" << query.lastError().text();
+            success = false;
+        }
+    }
+
+    // 4. 删除群聊
+    if (success) {
+        query.prepare("DELETE FROM group_chats WHERE group_id = ?");
+        query.bindValue(0, groupId);
+        if (!query.exec()) {
+            qWarning() << "删除群聊失败:" << query.lastError().text();
+            success = false;
+        }
+    }
+
+    // 提交或回滚事务 - 修改：使用静态方法
+    if (success) {
+        if (QSqlDatabase::database().commit()) {
+            qDebug() << "群聊解散成功:" << groupId;
+            return true;
+        } else {
+            qWarning() << "提交事务失败:" << QSqlDatabase::database().lastError().text();
+        }
+    }
+
+    QSqlDatabase::database().rollback();
+    return false;
+}
+
+bool Database::leaveGroup(int groupId, int userId, const QString &userType)
+{
+    qDebug() << "退出群聊:" << groupId << "用户:" << userId << userType;
+
+    // 修改：使用静态数据库连接，与 addGroupMember 保持一致
+    if (!QSqlDatabase::database().isOpen()) {
+        qWarning() << "数据库未连接";
+        return false;
+    }
+
+    QSqlQuery query;  // 修改：不指定数据库连接，使用默认连接
+
+    // 检查是否为群聊创建者
+    query.prepare("SELECT creator_id, creator_type FROM group_chats WHERE group_id = ?");
+    query.bindValue(0, groupId);
+
+    if (!query.exec()) {
+        qWarning() << "检查群聊信息失败:" << query.lastError().text();
+        return false;
+    }
+
+    if (!query.next()) {
+        qWarning() << "群聊不存在:" << groupId;
+        return false;
+    }
+
+    int creatorId = query.value("creator_id").toInt();
+    QString creatorType = query.value("creator_type").toString();
+
+    if (creatorId == userId && creatorType == userType) {
+        qWarning() << "创建者不能退出群聊，只能解散群聊";
+        qWarning() << "当前用户:" << userId << userType;
+        qWarning() << "群聊创建者:" << creatorId << creatorType;
+        return false;
+    }
+
+    // 检查是否为群聊成员
+    query.prepare("SELECT COUNT(*) as count FROM group_members WHERE group_id = ? AND user_id = ? AND user_type = ?");
+    query.bindValue(0, groupId);
+    query.bindValue(1, userId);
+    query.bindValue(2, userType);
+
+    if (!query.exec()) {
+        qWarning() << "检查群聊成员失败:" << query.lastError().text();
+        return false;
+    }
+
+    if (!query.next() || query.value("count").toInt() == 0) {
+        qWarning() << "用户不是群聊成员";
+        return false;
+    }
+
+    // 开始事务 - 修改：使用静态方法
+    if (!QSqlDatabase::database().transaction()) {
+        qWarning() << "开始事务失败";
+        return false;
+    }
+
+    bool success = true;
+
+    // 1. 从群聊成员中移除
+    query.prepare("DELETE FROM group_members WHERE group_id = ? AND user_id = ? AND user_type = ?");
+    query.bindValue(0, groupId);
+    query.bindValue(1, userId);
+    query.bindValue(2, userType);
+
+    if (!query.exec()) {
+        qWarning() << "移除群聊成员失败:" << query.lastError().text();
+        success = false;
+    }
+
+    // 2. 更新群聊成员数量
+    if (success) {
+        query.prepare("UPDATE group_chats SET member_count = member_count - 1 WHERE group_id = ?");
+        query.bindValue(0, groupId);
+        if (!query.exec()) {
+            qWarning() << "更新群聊成员数量失败:" << query.lastError().text();
+            success = false;
+        }
+    }
+
+    // 提交或回滚事务 - 修改：使用静态方法
+    if (success) {
+        if (QSqlDatabase::database().commit()) {
+            qDebug() << "退出群聊成功:" << groupId;
+            return true;
+        } else {
+            qWarning() << "提交事务失败:" << QSqlDatabase::database().lastError().text();
+        }
+    }
+
+    QSqlDatabase::database().rollback();
+    return false;
 }

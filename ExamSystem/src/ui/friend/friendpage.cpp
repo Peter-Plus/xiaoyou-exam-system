@@ -444,9 +444,36 @@ void FriendPage::onNavigationClicked()
 
 void FriendPage::onFriendDoubleClicked(QListWidgetItem *item)
 {
-    Q_UNUSED(item)
-    // 可以在这里添加查看好友详情的功能
-    showMessage("双击好友功能待开发");
+    if (!item) {
+        qDebug() << "好友双击：item为空";
+        return;
+    }
+
+    // 从item中获取好友信息
+    int friendId = item->data(Qt::UserRole).toInt();
+    QString friendType = item->data(Qt::UserRole + 1).toString();
+    QString friendName = item->data(Qt::UserRole + 2).toString();
+
+    qDebug() << "好友列表双击：" << friendName << "(" << friendType << ")" << "ID:" << friendId;
+
+    // 验证数据有效性
+    if (friendId <= 0 || friendType.isEmpty() || friendName.isEmpty()) {
+        qDebug() << "好友信息无效，取消打开聊天";
+        showMessage("好友信息异常，无法打开聊天", true);
+        return;
+    }
+
+    // 检查是否仍为好友关系
+    if (!m_database->areFriends(m_currentUserId, m_currentUserType, friendId, friendType)) {
+        showMessage("您与该用户已不是好友关系", true);
+        updateFriendsList(); // 刷新好友列表
+        return;
+    }
+
+    // 发射信号，通知主界面切换到聊天
+    emit friendDoubleClicked(friendId, friendType, friendName);
+
+    qDebug() << "已发射好友双击信号";
 }
 
 void FriendPage::onRemoveFriendClicked()
