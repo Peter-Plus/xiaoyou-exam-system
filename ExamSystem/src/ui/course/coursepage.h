@@ -11,7 +11,11 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QTimer>
-#include "../core/database.h"
+#include <QSqlQuery>
+#include "../../core/database.h"
+#include "enrollmentwidget.h"
+#include "noticewidget.h"
+#include "assignmentwidget.h"
 
 class CoursePage : public QWidget
 {
@@ -29,8 +33,19 @@ public:
         PAGE_COURSE_DETAIL = 2   // 课程详情（通知、作业）
     };
 
+    enum SubPageType {
+        SUBPAGE_NOTICE = 0,
+        SUBPAGE_ASSIGNMENT = 1
+    };
+
     CoursePage(Database *database, int userId, UserType userType, QWidget *parent = nullptr);
     ~CoursePage();
+
+    // 页面切换方法
+    void switchToSubPage(SubPageType subPage);
+    void showNotices();
+    void showAssignments();
+    void showEnrollment();
 
 public slots:
     void refreshData();
@@ -54,6 +69,9 @@ private:
     void setupTeacherUI();
     void createNavigationPanel();
     void createContentArea();
+    void createEnrollmentPage();
+    void createNoticePage();
+    void createAssignmentPage();
     void loadCourseList();
     void updateStatistics();
     void showPlaceholderPage(const QString &message);
@@ -86,6 +104,7 @@ private:
     UserType m_userType;
     int m_currentCourseId;
     PageType m_currentPage;
+    SubPageType m_currentSubPage;
 
     // 定时器
     QTimer *m_refreshTimer;
@@ -99,6 +118,11 @@ private:
     int m_pendingRequests;
     int m_unreadNotices;
     int m_pendingAssignments;
+
+    // 功能组件
+    EnrollmentWidget *m_enrollmentWidget;
+    NoticeWidget *m_noticeWidget;
+    AssignmentWidget *m_assignmentWidget;
 };
 
 #endif // COURSEPAGE_H

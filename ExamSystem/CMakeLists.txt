@@ -143,6 +143,24 @@ set(PROJECT_SOURCES
             src/ui/chat/invitememberdialog.h
             src/ui/chat/invitememberdialog.cpp
 
+            # 2.0版本 - 课程管理
+            src/ui/course/coursepage.h
+            src/ui/course/coursepage.cpp
+            src/ui/course/enrollmentwidget.h
+            src/ui/course/enrollmentwidget.cpp
+            src/ui/course/noticewidget.h
+            src/ui/course/noticewidget.cpp
+            src/ui/course/assignmentwidget.h
+            src/ui/course/assignmentwidget.cpp
+            src/models/coursenotice.h
+            src/models/coursenotice.cpp
+            src/models/assignment.h
+            src/models/assignment.cpp
+            src/models/enrollmentrequest.h
+            src/models/enrollmentrequest.cpp
+            src/models/submission.h
+            src/models/submission.cpp
+
 
 )
 
@@ -150,22 +168,6 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(ExamSystem
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
-        src/models/coursenotice.h
-        src/models/coursenotice.cpp
-        src/models/assignment.h
-        src/models/assignment.cpp
-        src/models/enrollmentrequest.h
-        src/models/enrollmentrequest.cpp
-        src/models/submission.h
-        src/models/submission.cpp
-        src/ui/course/coursepage.h
-        src/ui/course/coursepage.cpp
-        src/ui/course/enrollmentwidget.h
-        src/ui/course/enrollmentwidget.cpp
-        src/ui/course/noticewidget.h
-        src/ui/course/noticewidget.cpp
-        src/ui/course/assignmentwidget.h
-        src/ui/course/assignmentwidget.cpp
 
 
 

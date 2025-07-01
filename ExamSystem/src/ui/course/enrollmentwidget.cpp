@@ -387,11 +387,7 @@ void EnrollmentWidget::loadAvailableCourses()
 void EnrollmentWidget::loadEnrollmentRequests()
 {
     // 检查是否为选课管理员
-    QSqlQuery query(m_database->getDatabase());
-    query.prepare("SELECT is_course_admin FROM teachers WHERE teacher_id = ?");
-    query.addBindValue(m_userId);
-
-    if (!query.exec() || !query.next() || !query.value(0).toBool()) {
+    if (!m_database->isTeacherCourseAdmin(m_userId)) {
         QMessageBox::warning(this, "权限不足", "只有选课管理员才能审核选课申请！");
         return;
     }

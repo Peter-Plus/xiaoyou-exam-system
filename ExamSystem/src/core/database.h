@@ -464,6 +464,12 @@ public:
      * @return 是否有权限
      */
     bool canManageAssignments(int teacherId, int courseId);
+    /**
+    * @brief 检查教师是否为选课管理员
+    * @param teacherId 教师ID
+    * @return 是否为选课管理员
+    */
+    bool isTeacherCourseAdmin(int teacherId);
 
 private:
     QSqlDatabase db;

@@ -17,9 +17,9 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <QDialog>
-#include "../core/database.h"
-#include "../models/assignment.h"
-#include "../models/submission.h"
+#include "../../core/database.h"
+#include "assignment.h"
+#include "submission.h"
 
 class AssignmentEditDialog;
 

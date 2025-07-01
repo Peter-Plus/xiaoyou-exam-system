@@ -5052,3 +5052,17 @@ bool Database::canManageAssignments(int teacherId, int courseId)
     int courseTeacherId = query.value("teacher_id").toInt();
     return (courseTeacherId == teacherId);
 }
+
+bool Database::isTeacherCourseAdmin(int teacherId)
+{
+    QSqlQuery query(db);
+    query.prepare("SELECT is_course_admin FROM teachers WHERE teacher_id = ?");
+    query.addBindValue(teacherId);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toBool();
+    }
+
+    qDebug() << "检查选课管理员权限失败:" << query.lastError().text();
+    return false;
+}

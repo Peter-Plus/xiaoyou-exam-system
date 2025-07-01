@@ -21,6 +21,7 @@
 #include "../core/database.h"
 #include "../models/coursenotice.h"
 
+
 class NoticeEditDialog;
 
 class NoticeWidget : public QWidget

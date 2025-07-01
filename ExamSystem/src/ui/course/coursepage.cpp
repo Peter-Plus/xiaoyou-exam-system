@@ -5,8 +5,9 @@
 
 CoursePage::CoursePage(Database *database, int userId, UserType userType, QWidget *parent)
     : QWidget(parent), m_database(database), m_userId(userId), m_userType(userType),
-    m_currentCourseId(-1), m_currentPage(PAGE_MY_COURSES),
-    m_totalCourses(0), m_pendingRequests(0), m_unreadNotices(0), m_pendingAssignments(0)
+    m_currentCourseId(-1), m_currentPage(PAGE_MY_COURSES), m_currentSubPage(SUBPAGE_NOTICE),
+    m_totalCourses(0), m_pendingRequests(0), m_unreadNotices(0), m_pendingAssignments(0),
+    m_enrollmentWidget(nullptr), m_noticeWidget(nullptr), m_assignmentWidget(nullptr)
 {
     setupUI();
 
@@ -204,7 +205,12 @@ void CoursePage::createContentArea()
     m_detailStack = new QStackedWidget();
     m_detailLayout->addWidget(m_detailStack);
 
-    // 默认显示占位页面
+    // 创建功能页面
+    createEnrollmentPage();
+    createNoticePage();
+    createAssignmentPage();
+
+    // 默认显示选课/审核页面
     showPlaceholderPage("请选择左侧功能");
 }
 
@@ -232,14 +238,7 @@ void CoursePage::setupTeacherUI()
     if (m_userType == TEACHER) {
         // 检查是否为选课管理员
         if (m_database) {
-            QSqlQuery query(m_database->getDatabase());
-            query.prepare("SELECT is_course_admin FROM teachers WHERE teacher_id = ?");
-            query.addBindValue(m_userId);
-
-            bool isCourseAdmin = false;
-            if (query.exec() && query.next()) {
-                isCourseAdmin = query.value(0).toBool();
-            }
+            bool isCourseAdmin = m_database->isTeacherCourseAdmin(m_userId);
 
             if (isCourseAdmin) {
                 navigationItems << "📚 我的课程" << "✅ 选课审核" << "📋 课程管理";
@@ -418,20 +417,129 @@ void CoursePage::onPageChanged(int pageIndex)
     m_currentPage = static_cast<PageType>(pageIndex);
 
     QString pageName;
+    QWidget *targetWidget = nullptr;
+
     switch (m_currentPage) {
     case PAGE_MY_COURSES:
         pageName = "我的课程";
+        // 显示课程列表（可以是现有的占位页面）
+        showPlaceholderPage("我的课程功能开发中...");
         break;
+
     case PAGE_ENROLLMENT:
         pageName = (m_userType == STUDENT) ? "选课申请" : "选课审核";
+        targetWidget = m_enrollmentWidget;
         break;
+
     case PAGE_COURSE_DETAIL:
-        pageName = (m_userType == STUDENT) ? "课程详情" : "课程管理";
+        // 根据当前选择显示通知或作业
+        if (m_currentSubPage == SUBPAGE_NOTICE) {
+            pageName = "课程通知";
+            targetWidget = m_noticeWidget;
+        } else {
+            pageName = "课程作业";
+            targetWidget = m_assignmentWidget;
+        }
         break;
     }
 
-    // 暂时显示占位页面，后续步骤中实现具体功能页面
-    showPlaceholderPage(QString("即将推出：%1").arg(pageName));
+    if (targetWidget) {
+        m_contentStack->setCurrentWidget(targetWidget);
+
+        // 刷新对应组件的数据
+        if (targetWidget == m_enrollmentWidget) {
+            m_enrollmentWidget->refreshData();
+        } else if (targetWidget == m_noticeWidget) {
+            m_noticeWidget->refreshData();
+        } else if (targetWidget == m_assignmentWidget) {
+            m_assignmentWidget->refreshData();
+        }
+    }
 
     qDebug() << "切换到页面:" << pageName;
+}
+
+void CoursePage::createEnrollmentPage()
+{
+    if (m_userType == STUDENT) {
+        m_enrollmentWidget = new EnrollmentWidget(m_database, m_userId, EnrollmentWidget::STUDENT, this);
+    } else {
+        m_enrollmentWidget = new EnrollmentWidget(m_database, m_userId, EnrollmentWidget::TEACHER, this);
+    }
+
+    // 连接信号
+    connect(m_enrollmentWidget, &EnrollmentWidget::enrollmentSubmitted,
+            this, &CoursePage::courseEnrolled);
+    connect(m_enrollmentWidget, &EnrollmentWidget::requestProcessed,
+            this, &CoursePage::enrollmentProcessed);
+
+    m_contentStack->addWidget(m_enrollmentWidget);
+}
+
+void CoursePage::createNoticePage()
+{
+    if (m_userType == STUDENT) {
+        m_noticeWidget = new NoticeWidget(m_database, m_userId, NoticeWidget::STUDENT, -1, this);
+    } else {
+        m_noticeWidget = new NoticeWidget(m_database, m_userId, NoticeWidget::TEACHER, -1, this);
+    }
+
+    // 连接信号
+    connect(m_noticeWidget, &NoticeWidget::noticePublished,
+            this, &CoursePage::noticePublished);
+    connect(m_noticeWidget, &NoticeWidget::noticeUpdated,
+            this, [this](int noticeId, const QString &title) {
+                Q_UNUSED(noticeId)
+                emit noticePublished(-1, title); // 重用信号
+            });
+
+    m_contentStack->addWidget(m_noticeWidget);
+}
+
+void CoursePage::createAssignmentPage()
+{
+    if (m_userType == STUDENT) {
+        m_assignmentWidget = new AssignmentWidget(m_database, m_userId, AssignmentWidget::STUDENT, -1, this);
+    } else {
+        m_assignmentWidget = new AssignmentWidget(m_database, m_userId, AssignmentWidget::TEACHER, -1, this);
+    }
+
+    // 连接信号
+    connect(m_assignmentWidget, &AssignmentWidget::assignmentPublished,
+            this, &CoursePage::assignmentPublished);
+    connect(m_assignmentWidget, &AssignmentWidget::assignmentSubmitted,
+            this, [this](int assignmentId, int studentId) {
+                Q_UNUSED(assignmentId)
+                Q_UNUSED(studentId)
+                // 可以添加作业提交通知
+            });
+
+    m_contentStack->addWidget(m_assignmentWidget);
+}
+
+// 页面切换方法
+void CoursePage::switchToSubPage(SubPageType subPage)
+{
+    m_currentSubPage = subPage;
+
+    if (m_currentPage == PAGE_COURSE_DETAIL) {
+        onPageChanged(PAGE_COURSE_DETAIL);
+    }
+}
+
+void CoursePage::showNotices()
+{
+    switchToSubPage(SUBPAGE_NOTICE);
+    onPageChanged(PAGE_COURSE_DETAIL);
+}
+
+void CoursePage::showAssignments()
+{
+    switchToSubPage(SUBPAGE_ASSIGNMENT);
+    onPageChanged(PAGE_COURSE_DETAIL);
+}
+
+void CoursePage::showEnrollment()
+{
+    onPageChanged(PAGE_ENROLLMENT);
 }

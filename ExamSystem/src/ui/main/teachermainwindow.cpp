@@ -501,24 +501,7 @@ void TeacherMainWindow::switchToPage(int pageIndex)
     }
 }
 
-void TeacherMainWindow::onNavigationClicked()
-{
-    int currentRow = navigationList->currentRow();
 
-    // 特殊处理聊天页面
-    if (currentRow == PAGE_CHAT && m_chatPage) {
-        // 刷新聊天数据
-        m_chatPage->refreshChatList();
-    }
-
-    // 特殊处理好友页面
-    if (currentRow == PAGE_FRIEND && m_friendPage) {
-        // 刷新好友数据
-        m_friendPage->refreshAll();
-    }
-
-    switchToPage(currentRow);
-}
 
 void TeacherMainWindow::updateUserInfo()
 {
