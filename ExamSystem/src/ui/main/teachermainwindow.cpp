@@ -424,25 +424,50 @@ void TeacherMainWindow::createFriendPage()
 
 void TeacherMainWindow::createCoursePage()
 {
-    coursePage = new QWidget();
-    coursePage->setObjectName("coursePage");
+    // 检查数据库连接
+    if (!m_database) {
+        // 创建错误提示页面
+        coursePage = new QWidget();
+        coursePage->setObjectName("coursePage");
 
-    QVBoxLayout *layout = new QVBoxLayout(coursePage);
-    layout->setContentsMargins(40, 40, 40, 40);
+        QVBoxLayout *layout = new QVBoxLayout(coursePage);
+        layout->setContentsMargins(40, 40, 40, 40);
 
-    QLabel *titleLabel = new QLabel("课程管理");
-    titleLabel->setObjectName("pageTitle");
+        QLabel *titleLabel = new QLabel("课程管理");
+        titleLabel->setObjectName("pageTitle");
 
-    QLabel *comingSoonLabel = new QLabel("即将推出...\n敬请期待 2.0 版本的课程管理功能！\n支持课程通知、作业发布与批改");
-    comingSoonLabel->setObjectName("comingSoonLabel");
-    comingSoonLabel->setAlignment(Qt::AlignCenter);
+        QLabel *errorLabel = new QLabel("课程管理功能暂时不可用\n请检查数据库连接");
+        errorLabel->setObjectName("comingSoonLabel");
+        errorLabel->setAlignment(Qt::AlignCenter);
 
-    layout->addWidget(titleLabel);
-    layout->addStretch();
-    layout->addWidget(comingSoonLabel);
-    layout->addStretch();
+        layout->addWidget(titleLabel);
+        layout->addStretch();
+        layout->addWidget(errorLabel);
+        layout->addStretch();
 
-    contentStack->addWidget(coursePage);
+        contentStack->addWidget(coursePage);
+        qDebug() << "课程管理功能不可用：数据库连接无效";
+        return;
+    }
+
+    // 创建真正的课程管理页面
+    m_coursePage = new CoursePage(m_database, m_teacher.getId(), CoursePage::TEACHER, this);
+
+    // 连接信号槽
+    connect(m_coursePage, &CoursePage::courseEnrolled,
+            this, &TeacherMainWindow::onCourseEnrolled);
+    connect(m_coursePage, &CoursePage::enrollmentProcessed,
+            this, &TeacherMainWindow::onEnrollmentProcessed);
+    connect(m_coursePage, &CoursePage::noticePublished,
+            this, &TeacherMainWindow::onNoticePublished);
+    connect(m_coursePage, &CoursePage::assignmentPublished,
+            this, &TeacherMainWindow::onAssignmentPublished);
+
+    // 添加到内容栈
+    contentStack->addWidget(m_coursePage);
+    coursePage = m_coursePage; // 保持兼容性
+
+    qDebug() << "教师端课程管理页面创建成功";
 }
 
 void TeacherMainWindow::createSettingsPage()
@@ -782,4 +807,57 @@ void TeacherMainWindow::onFriendDoubleClickedToChat(int friendId, const QString 
     //                         QString("已为您打开与 %1 的聊天窗口").arg(friendName));
 
     qDebug() << "教师端好友双击切换聊天功能执行完成";
+}
+
+// 槽函数实现
+void TeacherMainWindow::onCourseEnrolled(int courseId)
+{
+    Q_UNUSED(courseId)
+    qDebug() << "教师端：收到选课事件";
+}
+
+void TeacherMainWindow::onEnrollmentProcessed(int studentId, int courseId, bool approved)
+{
+    Q_UNUSED(studentId)
+    Q_UNUSED(courseId)
+    QString action = approved ? "批准" : "拒绝";
+    qDebug() << "教师端：选课申请已" << action;
+    // 可以显示操作结果通知
+}
+
+void TeacherMainWindow::onNoticePublished(int courseId, const QString &title)
+{
+    Q_UNUSED(courseId)
+    qDebug() << "教师端：通知发布成功:" << title;
+    // 可以显示发布成功提示
+}
+
+void TeacherMainWindow::onAssignmentPublished(int courseId, const QString &title)
+{
+    Q_UNUSED(courseId)
+    qDebug() << "教师端：作业发布成功:" << title;
+    // 可以显示发布成功提示
+}
+
+// 在导航点击事件中添加课程页面的特殊处理
+void TeacherMainWindow::onNavigationClicked()
+{
+    int currentRow = navigationList->currentRow();
+
+    // 特殊处理聊天页面
+    if (currentRow == PAGE_CHAT && m_chatPage) {
+        m_chatPage->refreshChatList();
+    }
+
+    // 特殊处理好友页面
+    if (currentRow == PAGE_FRIEND && m_friendPage) {
+        m_friendPage->refreshAll();
+    }
+
+    // 特殊处理课程页面
+    if (currentRow == PAGE_COURSE && m_coursePage) {
+        m_coursePage->refreshData();
+    }
+
+    switchToPage(currentRow);
 }

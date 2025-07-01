@@ -1,0 +1,118 @@
+第一步：扩展Database类的课程管理方法 ⏳
+工作内容：
+
+添加选课管理相关方法（8-10个）
+
+getEnrollmentRequests() - 获取选课申请列表
+processEnrollmentRequest() - 处理选课申请（同意/拒绝）
+submitEnrollmentRequest() - 学生提交选课申请
+getCoursesByStudent() - 获取学生已选课程
+getCoursesByTeacher() - 获取教师教授课程
+
+
+添加课程通知相关方法（6-8个）
+
+addCourseNotice() - 发布课程通知
+getCourseNotices() - 获取课程通知列表
+updateNotice() - 更新通知（置顶等）
+deleteNotice() - 删除通知
+
+
+添加作业管理相关方法（8-10个）
+
+addAssignment() - 发布作业
+getAssignments() - 获取作业列表
+submitAssignment() - 提交作业
+gradeAssignment() - 批改作业
+getSubmissions() - 获取作业提交记录
+
+
+
+第二步：创建课程管理数据模型类 ⏳
+工作内容：
+
+创建 src/models/coursenotice.h/cpp - 课程通知实体类
+创建 src/models/assignment.h/cpp - 课程作业实体类
+创建 src/models/submission.h/cpp - 作业提交实体类
+创建 src/models/enrollmentrequest.h/cpp - 选课申请实体类
+每个类包含完整的属性封装、状态管理、格式化方法
+
+第三步：开发课程页面主框架 ⏳
+工作内容：
+
+创建 src/ui/course/coursepage.h/cpp - 课程管理主页面
+设计QQ风格三栏布局：课程列表 | 功能选择 | 具体内容
+学生端功能：我的课程 | 选课申请 | 课程详情（通知、作业）
+教师端功能：我的课程 | 选课审核 | 课程管理（通知、作业）
+建立页面切换和数据传递机制
+
+第四步：实现选课管理功能 ⏳
+工作内容：
+
+创建 src/ui/course/enrollmentwidget.h/cpp - 选课管理组件
+学生功能：
+
+浏览可选课程列表
+提交选课申请
+查看申请状态
+
+
+选课管理员功能：
+
+查看所有选课申请
+审核申请（同意/拒绝）
+课程人数统计
+
+
+权限控制：只有选课管理员可以审核申请
+
+第五步：实现课程通知系统 ⏳
+工作内容：
+
+创建 src/ui/course/noticewidget.h/cpp - 通知管理组件
+教师功能：
+
+发布课程通知
+编辑和删除通知
+设置通知置顶
+
+
+学生功能：
+
+查看课程通知列表
+查看通知详情
+按时间排序显示
+
+
+通知编辑器：支持富文本编辑
+
+第六步：实现作业管理系统 ⏳
+工作内容：
+
+创建 src/ui/course/assignmentwidget.h/cpp - 作业管理组件
+教师功能：
+
+发布作业（标题、描述、截止时间、分数）
+查看作业提交情况
+批改作业和给分
+
+
+学生功能：
+
+查看作业列表和要求
+提交作业内容
+查看批改结果
+
+
+作业状态管理：开放提交/已截止/已批改等
+
+第七步：主界面集成和功能联调 ⏳
+工作内容：
+
+集成到 src/ui/main/studentmainwindow.cpp 学生端
+集成到 src/ui/main/teachermainwindow.cpp 教师端
+创建课程页面并添加到导航系统
+信号槽连接和数据同步
+权限控制和错误处理
+界面样式统一和用户体验优化
+全功能测试验证
