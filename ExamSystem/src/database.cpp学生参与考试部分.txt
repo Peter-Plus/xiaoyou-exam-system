@@ -1,0 +1,461 @@
+//==========学生考试答题和阅卷相关方法===============================================
+
+
+
+
+
+// 获取学生可参与的考试
+QList<Exam> Database::getAvailableExamsForStudent(int studentId)
+{
+    QList<Exam> exams;
+    QSqlQuery query;
+
+    query.prepare("SELECT DISTINCT e.*, c.course_name, t.name as teacher_name "
+                  "FROM exams e "
+                  "INNER JOIN courses c ON e.course_id = c.course_id "
+                  "INNER JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "INNER JOIN student_courses sc ON c.course_id = sc.course_id "
+                  "WHERE sc.student_id = ? AND e.is_published = TRUE "
+                  "ORDER BY e.exam_date ASC, e.start_time ASC");
+    query.addBindValue(studentId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            exams.append(createExamFromQuery(query));
+        }
+    } else {
+        qDebug() << "获取学生可参与考试失败:" << query.lastError().text();
+    }
+
+    return exams;
+}
+
+// 获取学生考试历史
+QList<Exam> Database::getStudentExamHistory(int studentId)
+{
+    QList<Exam> exams;
+    QSqlQuery query;
+
+    query.prepare("SELECT DISTINCT e.*, c.course_name, t.name as teacher_name "
+                  "FROM exams e "
+                  "INNER JOIN courses c ON e.course_id = c.course_id "
+                  "INNER JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "INNER JOIN student_courses sc ON c.course_id = sc.course_id "
+                  "INNER JOIN student_answers sa ON e.exam_id = sa.exam_id "
+                  "WHERE sc.student_id = ? AND sa.student_id = ? "
+                  "ORDER BY e.exam_date DESC, e.start_time DESC");
+    query.addBindValue(studentId);
+    query.addBindValue(studentId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            exams.append(createExamFromQuery(query));
+        }
+    } else {
+        qDebug() << "获取学生考试历史失败:" << query.lastError().text();
+    }
+
+    return exams;
+}
+
+// 检查学生是否可以参与考试
+bool Database::canStudentTakeExam(int studentId, int examId)
+{
+    QSqlQuery query;
+
+    // 检查学生是否选修了该课程
+    query.prepare("SELECT 1 FROM student_courses sc "
+                  "INNER JOIN exams e ON sc.course_id = e.course_id "
+                  "WHERE sc.student_id = ? AND e.exam_id = ?");
+    query.addBindValue(studentId);
+    query.addBindValue(examId);
+
+    if (!query.exec() || !query.next()) {
+        qDebug() << "学生未选修该课程";
+        return false;
+    }
+
+    // 检查考试是否已发布且在进行时间内
+    QString status = getExamStatus(examId);
+    return (status == "已发布" || status == "进行中");
+}
+
+// 检查学生是否已开始答题
+bool Database::hasStudentStartedExam(int studentId, int examId)
+{
+    QSqlQuery query;
+
+    // 检查学生是否有任何答题记录（无论考试是否结束）
+    query.prepare("SELECT COUNT(*) FROM student_answers "
+                  "WHERE student_id = :studentId AND exam_id = :examId");
+    query.bindValue(":studentId", studentId);
+    query.bindValue(":examId", examId);
+
+    if (query.exec() && query.next()) {
+        int answerCount = query.value(0).toInt();
+        return answerCount > 0; // 有答题记录就说明学生已经参与并提交了
+    }
+
+    return false;
+}
+// 保存学生答案
+bool Database::saveStudentAnswer(int examId, int questionId, int studentId, const QString &answer)
+{
+    QSqlQuery query;
+
+    // 使用INSERT ... ON DUPLICATE KEY UPDATE或者先DELETE再INSERT的方式
+    // 确保每个学生每道题只有一条记录
+    query.prepare("INSERT INTO student_answers (exam_id, question_id, student_id, student_answer, score, is_graded) "
+                  "VALUES (:examId, :questionId, :studentId, :answer, 0, 0) "
+                  "ON DUPLICATE KEY UPDATE "
+                  "student_answer = VALUES(student_answer)");
+
+    query.bindValue(":examId", examId);
+    query.bindValue(":questionId", questionId);
+    query.bindValue(":studentId", studentId);
+    query.bindValue(":answer", answer);
+
+    if (!query.exec()) {
+        qDebug() << "保存学生答案失败:" << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "成功保存学生答案: 学生" << studentId << "考试" << examId << "题目" << questionId;
+    return true;
+}
+
+// 获取学生单题答案
+QString Database::getStudentAnswer(int examId, int questionId, int studentId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT student_answer FROM student_answers "
+                  "WHERE exam_id = ? AND question_id = ? AND student_id = ?");
+    query.addBindValue(examId);
+    query.addBindValue(questionId);
+    query.addBindValue(studentId);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toString();
+    }
+
+    return QString();
+}
+
+// 获取学生所有答案
+QList<StudentAnswer> Database::getStudentAnswers(int examId, int studentId)
+{
+    QList<StudentAnswer> answers;
+    QSqlQuery query;
+
+    query.prepare("SELECT sa.*, q.content, q.answer as correct_answer, q.question_type, q.score as full_score, "
+                  "s.name as student_name "
+                  "FROM student_answers sa "
+                  "INNER JOIN questions q ON sa.question_id = q.question_id "
+                  "INNER JOIN students s ON sa.student_id = s.student_id "
+                  "WHERE sa.exam_id = ? AND sa.student_id = ? "
+                  "ORDER BY sa.question_id");
+    query.addBindValue(examId);
+    query.addBindValue(studentId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            answers.append(createStudentAnswerFromQuery(query));
+        }
+    } else {
+        qDebug() << "获取学生答案失败:" << query.lastError().text();
+    }
+
+    return answers;
+}
+
+// 提交考试
+bool Database::submitExam(int examId, int studentId)
+{
+    // 先自动批改客观题
+    autoGradeObjectiveQuestions(examId, studentId);
+
+    qDebug() << "考试提交成功，客观题已自动批改";
+    return true;
+}
+
+// 获取提交时间（这里简化实现，实际可以记录最后答题时间）
+QDateTime Database::getStudentSubmitTime(int examId, int studentId)
+{
+    // 简化实现：返回当前时间，实际应该记录具体的提交时间
+    return QDateTime::currentDateTime();
+}
+
+// 自动批改客观题
+bool Database::autoGradeObjectiveQuestions(int examId, int studentId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT sa.exam_id, sa.question_id, sa.student_id, sa.student_answer, "
+                  "q.answer as correct_answer, q.question_type, q.score as full_score "
+                  "FROM student_answers sa "
+                  "INNER JOIN questions q ON sa.question_id = q.question_id "
+                  "WHERE sa.exam_id = ? AND sa.student_id = ? "
+                  "AND q.question_type IN ('单选', '多选', '填空') "
+                  "AND sa.is_graded = FALSE");
+    query.addBindValue(examId);
+    query.addBindValue(studentId);
+
+    if (!query.exec()) {
+        qDebug() << "查询客观题失败:" << query.lastError().text();
+        return false;
+    }
+
+    int gradedCount = 0;
+    while (query.next()) {
+        QString studentAnswer = query.value("student_answer").toString();
+        QString correctAnswer = query.value("correct_answer").toString();
+        QString questionType = query.value("question_type").toString();
+        int fullScore = query.value("full_score").toInt();
+        int questionId = query.value("question_id").toInt();
+
+        double score = calculateQuestionScore(studentAnswer, correctAnswer, questionType, fullScore);
+        updateAnswerScore(examId, questionId, studentId, score, true);
+        gradedCount++;
+    }
+
+    qDebug() << "客观题自动批改完成，共批改了" << gradedCount << "道题";
+    return true;
+}
+// 计算题目得分
+double Database::calculateQuestionScore(const QString &studentAnswer, const QString &correctAnswer,
+                                        const QString &questionType, int fullScore)
+{
+    if (studentAnswer.isEmpty()) {
+        return 0.0;
+    }
+
+    QString cleanStudentAnswer = studentAnswer.trimmed().toUpper();
+    QString cleanCorrectAnswer = correctAnswer.trimmed().toUpper();
+
+    if (questionType == "单选") {
+        // 单选题：完全匹配
+        return (cleanStudentAnswer == cleanCorrectAnswer) ? fullScore : 0.0;
+    } else if (questionType == "多选") {
+        // 多选题：完全匹配（可以考虑部分分数）
+        return (cleanStudentAnswer == cleanCorrectAnswer) ? fullScore : 0.0;
+    } else if (questionType == "填空") {
+        // 填空题：支持多个正确答案，用|分隔
+        QStringList correctAnswers = cleanCorrectAnswer.split("|");
+        for (const QString &answer : correctAnswers) {
+            if (cleanStudentAnswer == answer.trimmed()) {
+                return fullScore;
+            }
+        }
+        return 0.0;
+    }
+
+    // 主观题不自动批改
+    return 0.0;
+}
+
+// 获取待阅卷考试
+QList<Exam> Database::getExamsForGrading(int teacherId)
+{
+    QList<Exam> exams;
+    QSqlQuery query;
+
+    query.prepare("SELECT DISTINCT e.*, c.course_name, t.name as teacher_name "
+                  "FROM exams e "
+                  "INNER JOIN exam_permissions ep ON e.exam_id = ep.exam_id "
+                  "INNER JOIN courses c ON e.course_id = c.course_id "
+                  "INNER JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "WHERE ep.teacher_id = ? AND e.is_published = TRUE "
+                  "AND EXISTS (SELECT 1 FROM student_answers sa WHERE sa.exam_id = e.exam_id) "
+                  "ORDER BY e.exam_date DESC");
+    query.addBindValue(teacherId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            exams.append(createExamFromQuery(query));
+        }
+    } else {
+        qDebug() << "获取待阅卷考试失败:" << query.lastError().text();
+    }
+
+    return exams;
+}
+
+// 获取待批改答案
+QList<StudentAnswer> Database::getAnswersForGrading(int examId, const QString &questionType)
+{
+    QList<StudentAnswer> answers;
+    QSqlQuery query;
+
+    QString sql = "SELECT sa.*, q.content, q.answer as correct_answer, q.question_type, q.score as full_score, "
+                  "s.name as student_name "
+                  "FROM student_answers sa "
+                  "INNER JOIN questions q ON sa.question_id = q.question_id "
+                  "INNER JOIN students s ON sa.student_id = s.student_id "
+                  "WHERE sa.exam_id = ?";
+
+    if (!questionType.isEmpty()) {
+        sql += " AND q.question_type = ?";
+    }
+
+    sql += " ORDER BY sa.question_id, s.name";
+
+    query.prepare(sql);
+    query.addBindValue(examId);
+    if (!questionType.isEmpty()) {
+        query.addBindValue(questionType);
+    }
+
+    if (query.exec()) {
+        while (query.next()) {
+            answers.append(createStudentAnswerFromQuery(query));
+        }
+    } else {
+        qDebug() << "获取待批改答案失败:" << query.lastError().text();
+    }
+
+    return answers;
+}
+
+// 更新答案分数
+bool Database::updateAnswerScore(int examId, int questionId, int studentId, double score, bool isGraded)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE student_answers SET score = ?, is_graded = ? "
+                  "WHERE exam_id = ? AND question_id = ? AND student_id = ?");
+    query.addBindValue(score);
+    query.addBindValue(isGraded);
+    query.addBindValue(examId);
+    query.addBindValue(questionId);
+    query.addBindValue(studentId);
+
+    if (query.exec()) {
+        qDebug() << "答案分数更新成功";
+        return true;
+    } else {
+        qDebug() << "答案分数更新失败:" << query.lastError().text();
+        return false;
+    }
+}
+
+// 检查考试是否完全批改完成
+bool Database::isExamFullyGraded(int examId)
+{
+    QSqlQuery query;
+
+    // 获取该考试中所有参与学生的答题记录总数
+    query.prepare("SELECT COUNT(*) FROM student_answers "
+                  "WHERE exam_id = :examId");
+    query.bindValue(":examId", examId);
+
+    if (!query.exec() || !query.next()) {
+        qDebug() << "查询考试答题记录失败:" << query.lastError().text();
+        return false;
+    }
+    int totalAnswers = query.value(0).toInt();
+
+    if (totalAnswers == 0) {
+        qDebug() << "考试" << examId << "没有学生参与";
+        return true; // 没有学生参与考试，可以认为是"已完成"
+    }
+
+    // 获取已批改的答案数量
+    query.prepare("SELECT COUNT(*) FROM student_answers "
+                  "WHERE exam_id = :examId AND is_graded = 1");
+    query.bindValue(":examId", examId);
+
+    if (query.exec() && query.next()) {
+        int gradedAnswers = query.value(0).toInt();
+        bool fullyGraded = (gradedAnswers == totalAnswers);
+
+        qDebug() << "考试" << examId << "批改进度检查:";
+        qDebug() << "  - 总答题记录:" << totalAnswers;
+        qDebug() << "  - 已批改记录:" << gradedAnswers;
+        qDebug() << "  - 是否完全批改:" << fullyGraded;
+
+        return fullyGraded; // 所有答案都已批改
+    }
+
+    qDebug() << "查询已批改答案数量失败:" << query.lastError().text();
+    return false;
+}
+
+
+// 获取阅卷进度
+QMap<QString, int> Database::getGradingProgress(int examId)
+{
+    QMap<QString, int> progress;
+    QSqlQuery query;
+
+    query.prepare("SELECT q.question_type, "
+                  "COUNT(*) as total, "
+                  "SUM(CASE WHEN sa.is_graded = TRUE THEN 1 ELSE 0 END) as graded "
+                  "FROM student_answers sa "
+                  "INNER JOIN questions q ON sa.question_id = q.question_id "
+                  "WHERE sa.exam_id = ? "
+                  "GROUP BY q.question_type");
+    query.addBindValue(examId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            QString type = query.value("question_type").toString();
+            int total = query.value("total").toInt();
+            int graded = query.value("graded").toInt();
+
+            progress[type + "_total"] = total;
+            progress[type + "_graded"] = graded;
+        }
+    } else {
+        qDebug() << "获取阅卷进度失败:" << query.lastError().text();
+    }
+
+    return progress;
+}
+
+// 获取学生考试总分
+double Database::getStudentExamTotalScore(int examId, int studentId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT SUM(score) as total_score FROM student_answers "
+                  "WHERE exam_id = ? AND student_id = ?");
+    query.addBindValue(examId);
+    query.addBindValue(studentId);
+
+    if (query.exec() && query.next()) {
+        return query.value("total_score").toDouble();
+    }
+
+    return 0.0;
+}
+
+// 获取考试统计信息
+QMap<QString, QVariant> Database::getExamStatistics(int examId)
+{
+    QMap<QString, QVariant> stats;
+    QSqlQuery query;
+
+    // 获取参考学生数
+    query.prepare("SELECT COUNT(DISTINCT student_id) as student_count FROM student_answers WHERE exam_id = ?");
+    query.addBindValue(examId);
+    if (query.exec() && query.next()) {
+        stats["student_count"] = query.value("student_count").toInt();
+    }
+
+    // 获取成绩统计
+    query.prepare("SELECT "
+                  "MAX(total_score) as max_score, "
+                  "MIN(total_score) as min_score, "
+                  "AVG(total_score) as avg_score "
+                  "FROM ("
+                  "  SELECT student_id, SUM(score) as total_score "
+                  "  FROM student_answers "
+                  "  WHERE exam_id = ? "
+                  "  GROUP BY student_id"
+                  ") as scores");
+    query.addBindValue(examId);
+    if (query.exec() && query.next()) {
+        stats["max_score"] = query.value("max_score").toDouble();
+        stats["min_score"] = query.value("min_score").toDouble();
+        stats["avg_score"] = query.value("avg_score").toDouble();
+    }
+
+    return stats;
+}

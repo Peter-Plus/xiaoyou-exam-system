@@ -245,231 +245,72 @@ public:
     bool disbandGroup(int groupId, int userId, const QString &userType);
     bool leaveGroup(int groupId, int userId, const QString &userType);
 
-    // ============================================================================
-    // 选课管理相关方法 (8个方法)
-    // ============================================================================
 
-    /**
-     * @brief 获取选课申请列表
-     * @param adminId 选课管理员ID（为0时获取所有申请）
-     * @return 选课申请列表，包含申请者、课程、状态等信息
-     */
-    QList<QVariantMap> getEnrollmentRequests(int adminId = 0);
-
-    /**
-     * @brief 处理选课申请
-     * @param requestId 申请记录的主键（student_id + course_id）
-     * @param studentId 学生ID
-     * @param courseId 课程ID
-     * @param approved 是否批准（true=通过，false=拒绝）
-     * @param adminId 处理的管理员ID
-     * @return 是否处理成功
-     */
-    bool processEnrollmentRequest(int studentId, int courseId, bool approved, int adminId);
-
-    /**
-     * @brief 学生提交选课申请
-     * @param studentId 学生ID
-     * @param courseId 课程ID
-     * @return 是否提交成功
-     */
-    bool submitEnrollmentRequest(int studentId, int courseId);
-
-    /**
-     * @brief 获取学生已选课程列表
-     * @param studentId 学生ID
-     * @param includeApplying 是否包含申请中的课程
-     * @return 课程列表，包含课程详细信息和选课状态
-     */
-    QList<QVariantMap> getCoursesByStudent(int studentId, bool includeApplying = false);
-
-    /**
-     * @brief 获取教师教授的课程列表
-     * @param teacherId 教师ID
-     * @return 课程列表，包含课程详细信息和学生数量
-     */
-    QList<QVariantMap> getCoursesByTeacher(int teacherId);
-
-    /**
-     * @brief 获取可选课程列表（学生用）
-     * @param studentId 学生ID
-     * @return 可选课程列表，排除已选和申请中的课程
-     */
-    QList<QVariantMap> getAvailableCourses(int studentId);
-
-    /**
-     * @brief 检查学生是否已选择或申请某课程
-     * @param studentId 学生ID
-     * @param courseId 课程ID
-     * @return 选课状态：0=未选，1=已通过，2=申请中
-     */
-    int getEnrollmentStatus(int studentId, int courseId);
-
-    /**
-     * @brief 获取选课统计信息
-     * @param courseId 课程ID（为0时获取总体统计）
-     * @return 统计信息：申请中数量、已通过数量等
-     */
-    QVariantMap getEnrollmentStats(int courseId = 0);
 
     // ============================================================================
-    // 课程通知相关方法 (6个方法)
+    // 课程管理功能（阶段6新增）
     // ============================================================================
 
-    /**
-     * @brief 发布课程通知
-     * @param courseId 课程ID
-     * @param title 通知标题
-     * @param content 通知内容
-     * @param isPinned 是否置顶
-     * @param teacherId 发布教师ID
-     * @return 是否发布成功
-     */
-    bool addCourseNotice(int courseId, const QString &title, const QString &content,
-                         bool isPinned = false, int teacherId = 0);
+    // 选课管理（5个方法）
+    bool applyForCourse(int studentId, int courseId);                      // 学生申请选课
+    bool approveEnrollment(int studentId, int courseId);                   // 选课管理员审核通过
+    bool rejectEnrollment(int studentId, int courseId);                    // 选课管理员拒绝申请
+    QList<QVariantMap> getPendingEnrollments();                           // 获取待审核选课申请
+    QList<QVariantMap> getStudentCourses(int studentId);                  // 获取学生选课列表
 
-    /**
-     * @brief 获取课程通知列表
-     * @param courseId 课程ID
-     * @param studentId 学生ID（用于权限检查，为0表示教师查询）
-     * @return 通知列表，置顶通知在前
-     */
-    QList<QVariantMap> getCourseNotices(int courseId, int studentId = 0);
+    // 课程通知管理（4个方法）
+    int publishCourseNotice(int courseId, const QString &title,
+                            const QString &content, bool isPinned = false); // 发布课程通知
+    bool updateCourseNotice(int noticeId, const QString &title,
+                            const QString &content, bool isPinned);         // 更新通知
+    bool deleteCourseNotice(int noticeId);                                 // 删除通知
+    QList<QVariantMap> getCourseNotices(int courseId);                    // 获取课程通知列表
 
-    /**
-     * @brief 获取学生的所有课程通知
-     * @param studentId 学生ID
-     * @param limit 限制数量（最新N条）
-     * @return 所有已选课程的通知列表
-     */
-    QList<QVariantMap> getStudentAllNotices(int studentId, int limit = 50);
+    // 作业管理（6个方法）
+    int publishAssignment(int courseId, const QString &title,
+                          const QString &description, const QDateTime &deadline,
+                          int maxScore = 100);                              // 发布作业
+    bool updateAssignment(int assignmentId, const QString &title,
+                          const QString &description, const QDateTime &deadline,
+                          int maxScore);                                     // 更新作业
+    bool closeAssignment(int assignmentId);                               // 关闭作业提交
+    QList<QVariantMap> getCourseAssignments(int courseId);               // 获取课程作业列表
+    QList<QVariantMap> getStudentAssignments(int studentId);             // 获取学生作业列表
+    bool deleteAssignment(int assignmentId);                             // 删除作业
 
-    /**
-     * @brief 更新课程通知
-     * @param noticeId 通知ID
-     * @param title 新标题
-     * @param content 新内容
-     * @param isPinned 是否置顶
-     * @param teacherId 修改者ID（权限检查）
-     * @return 是否更新成功
-     */
-    bool updateCourseNotice(int noticeId, const QString &title, const QString &content,
-                            bool isPinned, int teacherId);
+    // 作业提交管理（5个方法）
+    bool submitAssignment(int assignmentId, int studentId,
+                          const QString &content);                         // 学生提交作业
+    bool gradeAssignment(int assignmentId, int studentId,
+                         double score, const QString &feedback = "");      // 教师批改作业
+    QList<QVariantMap> getAssignmentSubmissions(int assignmentId);       // 获取作业提交列表
+    QVariantMap getStudentSubmission(int assignmentId, int studentId);   // 获取学生提交详情
+    bool hasSubmittedAssignment(int assignmentId, int studentId);        // 检查是否已提交
 
-    /**
-     * @brief 删除课程通知
-     * @param noticeId 通知ID
-     * @param teacherId 删除者ID（权限检查）
-     * @return 是否删除成功
-     */
-    bool deleteCourseNotice(int noticeId, int teacherId);
 
-    /**
-     * @brief 检查教师是否有课程通知权限
-     * @param teacherId 教师ID
-     * @param courseId 课程ID
-     * @return 是否有权限
-     */
-    bool canManageCourseNotices(int teacherId, int courseId);
+    // 权限验证（3个方法）
+    bool isTeacherCourseAdmin(int teacherId);                                          // 检查是否为选课管理员
+    bool canManageCourse(int teacherId, int courseId);                    // 检查课程管理权限
+    bool isStudentEnrolled(int studentId, int courseId);                 // 检查学生是否已选课
 
-    // ============================================================================
-    // 作业管理相关方法 (10个方法)
-    // ============================================================================
+    // 作业批改辅助方法（新增）
+    int getAssignmentMaxScore(int assignmentId);                           // 获取作业最大分数
+    QString getAssignmentTitle(int assignmentId);                          // 获取作业标题
+    bool canTeacherGradeAssignment(int teacherId, int assignmentId);      // 检查批改权限
+    QVariantMap getAssignmentStats(int assignmentId);                     // 获取作业统计信息
 
-    /**
-     * @brief 发布课程作业
-     * @param courseId 课程ID
-     * @param title 作业标题
-     * @param description 作业描述
-     * @param deadline 截止时间
-     * @param maxScore 最大分数
-     * @param teacherId 发布教师ID
-     * @return 是否发布成功，返回作业ID（失败返回-1）
-     */
-    int addAssignment(int courseId, const QString &title, const QString &description,
-                      const QDateTime &deadline, int maxScore, int teacherId);
 
-    /**
-     * @brief 获取课程作业列表
-     * @param courseId 课程ID
-     * @param studentId 学生ID（用于获取提交状态，为0表示教师查询）
-     * @return 作业列表，包含作业信息和提交状态
-     */
-    QList<QVariantMap> getAssignments(int courseId, int studentId = 0);
+    QList<QVariantMap> getCourseMembers(int courseId);                    // 获取课程所有学生成员
+    // 获取课程扩展信息
+    QVariantMap getCourseExtendedInfo(int courseId);                      // 获取课程完整信息（包含扩展字段）
+    // 更新课程信息（教师专用）
+    bool updateCourseInfo(int courseId, const QString &courseName,        // 更新课程基本信息
+                          const QString &description, int credits,
+                          int courseHours, const QString &semester,
+                          int maxStudents, const QString &status);
 
-    /**
-     * @brief 获取学生的所有作业
-     * @param studentId 学生ID
-     * @param includeSubmitted 是否包含已提交的作业
-     * @return 所有已选课程的作业列表
-     */
-    QList<QVariantMap> getStudentAllAssignments(int studentId, bool includeSubmitted = true);
-
-    /**
-     * @brief 学生提交作业
-     * @param assignmentId 作业ID
-     * @param studentId 学生ID
-     * @param content 作业内容
-     * @return 是否提交成功
-     */
-    bool submitAssignment(int assignmentId, int studentId, const QString &content);
-
-    /**
-     * @brief 教师批改作业
-     * @param assignmentId 作业ID
-     * @param studentId 学生ID
-     * @param score 给分
-     * @param feedback 评语
-     * @param teacherId 批改教师ID
-     * @return 是否批改成功
-     */
-    bool gradeAssignment(int assignmentId, int studentId, double score,
-                         const QString &feedback, int teacherId);
-
-    /**
-     * @brief 获取作业提交记录
-     * @param assignmentId 作业ID
-     * @param teacherId 教师ID（权限检查）
-     * @return 提交记录列表，包含学生信息和提交状态
-     */
-    QList<QVariantMap> getSubmissions(int assignmentId, int teacherId = 0);
-
-    /**
-     * @brief 获取学生的作业提交详情
-     * @param assignmentId 作业ID
-     * @param studentId 学生ID
-     * @return 提交详情，包含内容、分数、评语等
-     */
-    QVariantMap getSubmissionDetail(int assignmentId, int studentId);
-
-    /**
-     * @brief 检查作业是否可以提交
-     * @param assignmentId 作业ID
-     * @param studentId 学生ID
-     * @return 是否可以提交（未截止且学生已选课程）
-     */
-    bool canSubmitAssignment(int assignmentId, int studentId);
-
-    /**
-     * @brief 获取作业统计信息
-     * @param assignmentId 作业ID
-     * @return 统计信息：总人数、已提交、已批改、平均分等
-     */
-    QVariantMap getAssignmentStats(int assignmentId);
-
-    /**
-     * @brief 检查教师是否有作业管理权限
-     * @param teacherId 教师ID
-     * @param courseId 课程ID
-     * @return 是否有权限
-     */
-    bool canManageAssignments(int teacherId, int courseId);
-    /**
-    * @brief 检查教师是否为选课管理员
-    * @param teacherId 教师ID
-    * @return 是否为选课管理员
-    */
-    bool isTeacherCourseAdmin(int teacherId);
+    // 获取课程统计信息
+    QVariantMap getCourseStats(int courseId);                            // 获取课程统计数据
 
 private:
     QSqlDatabase db;

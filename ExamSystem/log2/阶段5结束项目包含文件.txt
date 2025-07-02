@@ -1,0 +1,114 @@
+# 主程序文件
+            main.cpp
+
+            # 核心模块
+            src/core/database.h
+            src/core/database.cpp
+
+            # 数据模型
+            src/models/user.h
+            src/models/user.cpp
+            src/models/student.h
+            src/models/student.cpp
+            src/models/teacher.h
+            src/models/teacher.cpp
+            src/models/course.h
+            src/models/course.cpp
+            src/models/exam.h
+            src/models/exam.cpp
+            src/models/question.h
+            src/models/question.cpp
+            src/models/studentanswer.h
+            src/models/studentanswer.cpp
+            src/models/classstatistics.h
+            src/models/classstatistics.cpp
+
+            # 登录注册
+            src/ui/auth/loginwindow.h
+            src/ui/auth/loginwindow.cpp
+            src/ui/auth/registerwindow.h
+            src/ui/auth/registerwindow.cpp
+
+            # 主界面
+            src/ui/main/studentmainwindow.h
+            src/ui/main/studentmainwindow.cpp
+            src/ui/main/teachermainwindow.h
+            src/ui/main/teachermainwindow.cpp
+
+            # 学生界面
+            src/ui/student/studentexamlist.h
+            src/ui/student/studentexamlist.cpp
+            src/ui/student/examtaking.h
+            src/ui/student/examtaking.cpp
+            src/ui/student/examresult.h
+            src/ui/student/examresult.cpp
+
+            # 教师界面 - 题库管理
+            src/ui/teacher/questions/questionmanager.h
+            src/ui/teacher/questions/questionmanager.cpp
+            src/ui/teacher/questions/questiondialog.h
+            src/ui/teacher/questions/questiondialog.cpp
+
+            # 教师界面 - 考试管理
+            src/ui/teacher/exams/exammanager.h
+            src/ui/teacher/exams/exammanager.cpp
+            src/ui/teacher/exams/examdialog.h
+            src/ui/teacher/exams/examdialog.cpp
+            src/ui/teacher/exams/papercomposer.h
+            src/ui/teacher/exams/papercomposer.cpp
+            src/ui/teacher/exams/paperpreview.h
+            src/ui/teacher/exams/paperpreview.cpp
+            src/ui/teacher/exams/permissiondialog.h
+            src/ui/teacher/exams/permissiondialog.cpp
+            src/ui/teacher/exams/examstatusmanager.h
+            src/ui/teacher/exams/examstatusmanager.cpp
+
+            # 教师界面 - 阅卷
+            src/ui/teacher/grading/examgrading.h
+            src/ui/teacher/grading/examgrading.cpp
+
+            # 教师界面 - 成绩统计
+            src/ui/teacher/statistics/classstatisticswindow.h
+            src/ui/teacher/statistics/classstatisticswindow.cpp
+
+            # 好友相关模型
+            src/models/friendinfo.h
+            src/models/friendinfo.cpp
+            src/models/friendrequest.h
+            src/models/friendrequest.cpp
+            src/models/userinfo.h
+            src/models/userinfo.cpp
+            src/ui/friend/friendmanager.h
+            src/ui/friend/friendmanager.cpp
+            src/ui/friend/friendpage.h
+            src/ui/friend/friendpage.cpp
+
+            #私聊相关
+            src/ui/chat/messagebubblewidget.h
+            src/ui/chat/messagebubblewidget.cpp
+            src/models/chatinfo.h
+            src/models/chatinfo.cpp
+            src/models/messageinfo.h
+            src/models/messageinfo.cpp
+            src/ui/chat/chatpage.h
+            src/ui/chat/chatpage.cpp
+
+            #群聊相关
+            src/models/groupinfo.h
+            src/models/groupinfo.cpp
+            src/models/grouprequest.h
+            src/models/grouprequest.cpp
+            src/models/groupmember.h
+            src/models/groupmember.cpp
+            src/ui/chat/grouplistwidget.h
+            src/ui/chat/grouplistwidget.cpp
+            src/ui/chat/creategroupdialog.h
+            src/ui/chat/creategroupdialog.cpp
+            src/ui/chat/joingroupdialog.h
+            src/ui/chat/joingroupdialog.cpp
+            src/ui/chat/groupmanagewidget.h
+            src/ui/chat/groupmanagewidget.cpp
+            src/ui/chat/groupdetailwidget.h
+            src/ui/chat/groupdetailwidget.cpp
+            src/ui/chat/invitememberdialog.h
+            src/ui/chat/invitememberdialog.cpp

@@ -19,9 +19,6 @@
 #include "../../ui/friend/friendpage.h"
 #include "../../ui/chat/chatpage.h"
 #include "../../ui/course/coursepage.h"
-#include "../../ui/course/enrollmentwidget.h"
-#include "../../ui/course/noticewidget.h"
-#include "../../ui/course/assignmentwidget.h"
 
 class StudentMainWindow : public QMainWindow
 {
@@ -46,11 +43,10 @@ private slots:
     void onChatOpened(int friendId, const QString &friendName);
     // 新增：处理好友双击事件的槽函数
     void onFriendDoubleClickedToChat(int friendId, const QString &friendType, const QString &friendName);
-    void onCourseEnrolled(int courseId);
-    void onEnrollmentProcessed(int studentId, int courseId, bool approved);
-    void onNoticePublished(int courseId, const QString &title);
-    void onAssignmentPublished(int courseId, const QString &title);
-
+    // 课程管理
+    void onEnrollmentSubmitted(int courseId);
+    void onNoticePublished(int courseId);
+    void onAssignmentPublished(int courseId);
 
 
 private:

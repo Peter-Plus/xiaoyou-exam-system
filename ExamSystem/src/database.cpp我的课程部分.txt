@@ -1,0 +1,205 @@
+QList<QVariantMap> Database::getCourseMembers(int courseId)
+{
+    QList<QVariantMap> members;
+    QSqlQuery query;
+
+    query.prepare("SELECT s.student_id, s.name, s.grade, s.college, "
+                  "sc.enrollment_status, sc.enrollment_time "
+                  "FROM students s "
+                  "JOIN student_courses sc ON s.student_id = sc.student_id "
+                  "WHERE sc.course_id = ? "
+                  "ORDER BY sc.enrollment_time ASC");
+    query.addBindValue(courseId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            QVariantMap member;
+            member["student_id"] = query.value("student_id").toInt();
+            member["name"] = query.value("name").toString();
+            member["grade"] = query.value("grade").toString();
+            member["college"] = query.value("college").toString();
+            member["enrollment_status"] = query.value("enrollment_status").toString();
+            member["enrollment_time"] = query.value("enrollment_time").toDateTime();
+            members.append(member);
+        }
+    } else {
+        qDebug() << "获取课程成员失败:" << query.lastError().text();
+    }
+
+    return members;
+}
+
+QVariantMap Database::getCourseExtendedInfo(int courseId)
+{
+    QVariantMap courseInfo;
+    QSqlQuery query;
+
+    query.prepare("SELECT c.course_id, c.course_name, c.college, c.description, "
+                  "c.credits, c.course_hours, c.semester, c.max_students, c.status, "
+                  "t.name as teacher_name, t.teacher_id, "
+                  "COUNT(sc.student_id) as student_count "
+                  "FROM courses c "
+                  "JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "LEFT JOIN student_courses sc ON c.course_id = sc.course_id "
+                  "    AND sc.enrollment_status = '已通过' "
+                  "WHERE c.course_id = ? "
+                  "GROUP BY c.course_id");
+    query.addBindValue(courseId);
+
+    if (query.exec() && query.next()) {
+        courseInfo["course_id"] = query.value("course_id").toInt();
+        courseInfo["course_name"] = query.value("course_name").toString();
+        courseInfo["college"] = query.value("college").toString();
+        courseInfo["description"] = query.value("description").toString();
+        courseInfo["credits"] = query.value("credits").toInt();
+        courseInfo["course_hours"] = query.value("course_hours").toInt();
+        courseInfo["semester"] = query.value("semester").toString();
+        courseInfo["max_students"] = query.value("max_students").toInt();
+        courseInfo["status"] = query.value("status").toString();
+        courseInfo["teacher_name"] = query.value("teacher_name").toString();
+        courseInfo["teacher_id"] = query.value("teacher_id").toInt();
+        courseInfo["student_count"] = query.value("student_count").toInt();
+    } else {
+        qDebug() << "获取课程扩展信息失败:" << query.lastError().text();
+    }
+
+    return courseInfo;
+}
+
+bool Database::updateCourseInfo(int courseId, const QString &courseName,
+                                const QString &description, int credits,
+                                int courseHours, const QString &semester,
+                                int maxStudents, const QString &status)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE courses SET "
+                  "course_name = ?, description = ?, credits = ?, "
+                  "course_hours = ?, semester = ?, max_students = ?, status = ? "
+                  "WHERE course_id = ?");
+    query.addBindValue(courseName);
+    query.addBindValue(description);
+    query.addBindValue(credits);
+    query.addBindValue(courseHours);
+    query.addBindValue(semester);
+    query.addBindValue(maxStudents);
+    query.addBindValue(status);
+    query.addBindValue(courseId);
+
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "课程信息更新成功";
+        return true;
+    } else {
+        qDebug() << "更新课程信息失败:" << query.lastError().text();
+        return false;
+    }
+}
+
+QVariantMap Database::getCourseStats(int courseId)
+{
+    QVariantMap stats;
+
+    // 获取基本统计信息
+    QSqlQuery query;
+    query.prepare("SELECT "
+                  "COUNT(CASE WHEN sc.enrollment_status = '已通过' THEN 1 END) as enrolled_count, "
+                  "COUNT(CASE WHEN sc.enrollment_status = '申请中' THEN 1 END) as pending_count, "
+                  "c.max_students "
+                  "FROM courses c "
+                  "LEFT JOIN student_courses sc ON c.course_id = sc.course_id "
+                  "WHERE c.course_id = ? "
+                  "GROUP BY c.course_id, c.max_students");
+    query.addBindValue(courseId);
+
+    if (query.exec() && query.next()) {
+        int enrolledCount = query.value("enrolled_count").toInt();
+        int pendingCount = query.value("pending_count").toInt();
+        int maxStudents = query.value("max_students").toInt();
+
+        stats["enrolled_count"] = enrolledCount;
+        stats["pending_count"] = pendingCount;
+        stats["max_students"] = maxStudents;
+        stats["available_slots"] = maxStudents - enrolledCount;
+        stats["enrollment_rate"] = maxStudents > 0 ?
+                                       (double)enrolledCount / maxStudents * 100 : 0.0;
+    }
+
+    // 获取作业和考试统计
+    QSqlQuery assignmentQuery;
+    assignmentQuery.prepare("SELECT COUNT(*) as assignment_count "
+                            "FROM course_assignments WHERE course_id = ?");
+    assignmentQuery.addBindValue(courseId);
+
+    if (assignmentQuery.exec() && assignmentQuery.next()) {
+        stats["assignment_count"] = assignmentQuery.value("assignment_count").toInt();
+    }
+
+    QSqlQuery examQuery;
+    examQuery.prepare("SELECT COUNT(*) as exam_count "
+                      "FROM exams WHERE course_id = ?");
+    examQuery.addBindValue(courseId);
+
+    if (examQuery.exec() && examQuery.next()) {
+        stats["exam_count"] = examQuery.value("exam_count").toInt();
+    }
+
+    // 获取通知统计
+    QSqlQuery noticeQuery;
+    noticeQuery.prepare("SELECT COUNT(*) as notice_count "
+                        "FROM course_notices WHERE course_id = ?");
+    noticeQuery.addBindValue(courseId);
+
+    if (noticeQuery.exec() && noticeQuery.next()) {
+        stats["notice_count"] = noticeQuery.value("notice_count").toInt();
+    }
+
+    return stats;
+}
+
+
+// 在getTeacherCourses方法中增加课程扩展信息的查询
+QList<Course> Database::getTeacherCourses(int teacherId)
+{
+    QList<Course> courses;
+    QSqlQuery query;
+
+    // 修改查询以包含扩展信息和学生数量统计
+    query.prepare("SELECT c.course_id, c.teacher_id, c.course_name, c.college, c.description, "
+                  "c.credits, c.course_hours, c.semester, c.max_students, c.status, "
+                  "t.name as teacher_name, "
+                  "COUNT(sc.student_id) as student_count "
+                  "FROM courses c "
+                  "JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "LEFT JOIN student_courses sc ON c.course_id = sc.course_id "
+                  "    AND sc.enrollment_status = '已通过' "
+                  "WHERE c.teacher_id = ? "
+                  "GROUP BY c.course_id "
+                  "ORDER BY c.course_name");
+    query.addBindValue(teacherId);
+
+
+    if (query.exec()) {
+        while (query.next()) {
+            Course course;
+            course.setCourseId(   query.value("course_id").toInt());
+            course.setTeacherId(  query.value("teacher_id").toInt());
+            course.setCollege(    query.value("college").toString());
+            course.setCourseName( query.value("course_name").toString());
+            course.setTeacherName(query.value("teacher_name").toString());
+
+            // —— 新增 ——
+            course.setDescription( query.value("description").toString());
+            course.setCredits(     query.value("credits").toInt());
+            course.setCourseHours( query.value("course_hours").toInt());
+            course.setSemester(    query.value("semester").toString());
+            course.setMaxStudents( query.value("max_students").toInt());
+            course.setStatus(      query.value("status").toString());
+            course.setStudentCount(query.value("student_count").toInt());
+
+            courses.append(course);
+        }
+    } else {
+        qDebug() << "获取教师课程失败:" << query.lastError().text();
+    }
+
+    return courses;
+}

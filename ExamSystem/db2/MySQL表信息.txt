@@ -1,0 +1,183 @@
+## students
+
+* **student\_id**: INT
+* **name**: VARCHAR(100)
+* **grade**: VARCHAR(20)
+* **college**: VARCHAR(100)
+* **password**: VARCHAR(255)
+
+## teachers
+
+* **teacher\_id**: INT
+* **name**: VARCHAR(100)
+* **college**: VARCHAR(100)
+* **password**: VARCHAR(255)
+* **is\_course\_admin**: BOOLEAN
+
+## courses
+
+* **course\_id**: INT
+* **teacher\_id**: INT
+* **college**: VARCHAR(100)
+* **course\_name**: VARCHAR(200)
+* **description**: TEXT
+* **credits**: INT
+* **course\_hours**: INT
+* **semester**: VARCHAR(50)
+* **max\_students**: INT
+* **status**: ENUM('开放选课', '关闭选课', '已结束')
+
+## student\_courses
+
+* **student\_id**: INT
+* **course\_id**: INT
+* **exam\_score**: DECIMAL(5,2)
+* **enrollment\_status**: ENUM('申请中', '已通过')
+* **enrollment\_time**: TIMESTAMP
+
+## questions
+
+* **question\_id**: INT
+* **question\_type**: VARCHAR(40)
+* **course\_name**: VARCHAR(200)
+* **score**: INT
+* **content**: TEXT
+* **answer**: TEXT
+* **creator\_id**: INT
+* **modifier\_id**: INT
+* **frequency**: INT
+* **is\_public**: BOOLEAN
+
+## question\_favorites
+
+* **question\_id**: INT
+* **teacher\_id**: INT
+
+## exams
+
+* **exam\_id**: INT
+* **exam\_name**: VARCHAR(200)
+* **course\_id**: INT
+* **exam\_date**: DATE
+* **start\_time**: TIME
+* **end\_time**: TIME
+* **total\_score**: INT
+* **is\_published**: BOOLEAN
+* **is\_completed**: BOOLEAN
+
+## exam\_questions
+
+* **exam\_id**: INT
+* **question\_id**: INT
+* **question\_order**: INT
+
+## exam\_permissions
+
+* **exam\_id**: INT
+* **teacher\_id**: INT
+* **is\_creator**: BOOLEAN
+
+## student\_answers
+
+* **exam\_id**: INT
+* **question\_id**: INT
+* **student\_id**: INT
+* **student\_answer**: TEXT
+* **score**: DECIMAL(5,2)
+* **is\_graded**: BOOLEAN
+
+## friend\_relationships
+
+* **friendship\_id**: INT
+* **user1\_id**: INT
+* **user1\_type**: ENUM('学生', '老师')
+* **user2\_id**: INT
+* **user2\_type**: ENUM('学生', '老师')
+* **created\_time**: TIMESTAMP
+
+## friend\_requests
+
+* **request\_id**: INT
+* **requester\_id**: INT
+* **requester\_type**: ENUM('学生', '老师')
+* **target\_id**: INT
+* **target\_type**: ENUM('学生', '老师')
+* **status**: ENUM('申请中', '已同意')
+* **request\_time**: TIMESTAMP
+
+## private\_chats
+
+* **chat\_id**: INT
+* **user1\_id**: INT
+* **user1\_type**: ENUM('学生', '老师')
+* **user2\_id**: INT
+* **user2\_type**: ENUM('学生', '老师')
+* **created\_time**: TIMESTAMP
+* **last\_message\_time**: TIMESTAMP
+
+## group\_chats
+
+* **group\_id**: INT
+* **group\_name**: VARCHAR(100)
+* **creator\_id**: INT
+* **creator\_type**: ENUM('学生', '老师')
+* **created\_time**: TIMESTAMP
+* **last\_message\_time**: TIMESTAMP
+* **member\_count**: INT
+
+## group\_members
+
+* **group\_id**: INT
+* **user\_id**: INT
+* **user\_type**: ENUM('学生', '老师')
+* **join\_time**: TIMESTAMP
+
+## messages
+
+* **message\_id**: INT
+* **chat\_type**: ENUM('私聊', '群聊')
+* **chat\_id**: INT
+* **sender\_id**: INT
+* **sender\_type**: ENUM('学生', '老师')
+* **content**: TEXT
+* **send\_time**: TIMESTAMP
+
+## group\_requests
+
+* **request\_id**: INT
+* **group\_id**: INT
+* **requester\_id**: INT
+* **requester\_type**: ENUM('学生', '老师')
+* **status**: ENUM('申请中', '已同意')
+* **request\_time**: TIMESTAMP
+
+## course\_notices
+
+* **notice\_id**: INT
+* **course\_id**: INT
+* **title**: VARCHAR(200)
+* **content**: TEXT
+* **publish\_time**: TIMESTAMP
+* **is\_pinned**: BOOLEAN
+
+## course\_assignments
+
+* **assignment\_id**: INT
+* **course\_id**: INT
+* **title**: VARCHAR(200)
+* **description**: TEXT
+* **publish\_time**: TIMESTAMP
+* **deadline**: TIMESTAMP
+* **max\_score**: INT
+* **status**: ENUM('开放提交', '已截止')
+
+## assignment\_submissions
+
+* **assignment\_id**: INT
+* **student\_id**: INT
+* **content**: TEXT
+* **submit\_time**: TIMESTAMP
+* **score**: DECIMAL(5,2)
+* **feedback**: TEXT
+* **grade\_time**: TIMESTAMP
+* **status**: ENUM('已提交', '已批改', '逾期提交')

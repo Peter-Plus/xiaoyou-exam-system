@@ -5,14 +5,14 @@
 #include <QScreen>
 
 StudentMainWindow::StudentMainWindow(const Student &student, Database *database, QWidget *parent)
-    : QMainWindow(parent), currentStudent(student), database(database), examListWindow(nullptr), m_friendPage(nullptr), m_chatPage(nullptr)  // 添加m_chatPage(nullptr)
+    : QMainWindow(parent), currentStudent(student), database(database), examListWindow(nullptr), m_friendPage(nullptr), m_chatPage(nullptr), m_coursePage(nullptr)  // 添加m_chatPage(nullptr)
 {
     setupUI();
     updateUserInfo();
 }
 
 StudentMainWindow::StudentMainWindow(int studentId, QWidget *parent)
-    : QMainWindow(parent), database(nullptr), examListWindow(nullptr), m_friendPage(nullptr), m_chatPage(nullptr)  // 添加m_chatPage(nullptr)
+    : QMainWindow(parent), database(nullptr), examListWindow(nullptr), m_friendPage(nullptr), m_chatPage(nullptr),m_coursePage(nullptr)  // 添加m_chatPage(nullptr)
 {
     currentStudent.setId(studentId);
     setupUI();
@@ -102,21 +102,22 @@ void StudentMainWindow::setupHeaderArea()
     userInfoLayout->addWidget(userNameLabel);
     userInfoLayout->addWidget(userInfoLabel);
 
-    // 右侧按钮
-    settingsButton = new QPushButton("⚙");
-    settingsButton->setFixedSize(30, 30);
-    settingsButton->setObjectName("iconButton");
 
-    logoutButton = new QPushButton("退出");
-    logoutButton->setObjectName("logoutButton");
 
     headerLayout->addWidget(userAvatarLabel);
     headerLayout->addLayout(userInfoLayout);
     headerLayout->addStretch();
-    headerLayout->addWidget(settingsButton);
-    headerLayout->addWidget(logoutButton);
+    // // 右侧按钮
+    // settingsButton = new QPushButton("⚙");
+    // settingsButton->setFixedSize(30, 30);
+    // settingsButton->setObjectName("iconButton");
 
-    connect(logoutButton, &QPushButton::clicked, this, &StudentMainWindow::onLogoutClicked);
+    // logoutButton = new QPushButton("退出");
+    // logoutButton->setObjectName("logoutButton");
+    // headerLayout->addWidget(settingsButton);
+    // headerLayout->addWidget(logoutButton);
+
+    // connect(logoutButton, &QPushButton::clicked, this, &StudentMainWindow::onLogoutClicked);
 }
 
 void StudentMainWindow::setupNavigationBar()
@@ -156,8 +157,18 @@ void StudentMainWindow::setupNavigationBar()
     navigationList->setCurrentRow(PAGE_EXAM);
 
     navLayout->addWidget(navigationList);
+    // 右侧按钮
+    // settingsButton = new QPushButton("⚙");
+    // settingsButton->setFixedSize(30, 30);
+    // settingsButton->setObjectName("iconButton");
+
+    logoutButton = new QPushButton("退出登录");
+    logoutButton->setObjectName("logoutButton");
+    // navLayout->addWidget(settingsButton);
+    navLayout->addWidget(logoutButton);
 
     connect(navigationList, &QListWidget::itemClicked, this, &StudentMainWindow::onNavigationClicked);
+    connect(logoutButton, &QPushButton::clicked, this, &StudentMainWindow::onLogoutClicked);
 }
 
 void StudentMainWindow::setupContentArea()
@@ -392,38 +403,32 @@ void StudentMainWindow::createCoursePage()
 {
     // 检查数据库连接
     if (!database) {
-        // 创建错误提示页面
+        // 创建错误占位页面
         coursePage = new QWidget();
         coursePage->setObjectName("coursePage");
 
         QVBoxLayout *layout = new QVBoxLayout(coursePage);
         layout->setContentsMargins(30, 30, 30, 30);
 
-        QLabel *titleLabel = new QLabel("课程管理");
-        titleLabel->setObjectName("pageTitle");
-
-        QLabel *errorLabel = new QLabel("课程管理功能暂时不可用\n请检查数据库连接");
-        errorLabel->setObjectName("comingSoonLabel");
+        QLabel *errorLabel = new QLabel("❌ 数据库连接错误\n无法加载课程管理功能");
+        errorLabel->setObjectName("errorLabel");
         errorLabel->setAlignment(Qt::AlignCenter);
+        errorLabel->setStyleSheet("color: #ff4d4f; font-size: 16px;");
 
-        layout->addWidget(titleLabel);
         layout->addStretch();
         layout->addWidget(errorLabel);
         layout->addStretch();
 
         contentStack->addWidget(coursePage);
-        qDebug() << "课程管理功能不可用：数据库连接无效";
         return;
     }
 
     // 创建真正的课程管理页面
-    m_coursePage = new CoursePage(database, currentStudent.getId(), CoursePage::STUDENT, this);
+    m_coursePage = new CoursePage(database, currentStudent.getId(), "学生", this);
 
     // 连接信号槽
-    connect(m_coursePage, &CoursePage::courseEnrolled,
-            this, &StudentMainWindow::onCourseEnrolled);
-    connect(m_coursePage, &CoursePage::enrollmentProcessed,
-            this, &StudentMainWindow::onEnrollmentProcessed);
+    connect(m_coursePage, &CoursePage::enrollmentSubmitted,
+            this, &StudentMainWindow::onEnrollmentSubmitted);
     connect(m_coursePage, &CoursePage::noticePublished,
             this, &StudentMainWindow::onNoticePublished);
     connect(m_coursePage, &CoursePage::assignmentPublished,
@@ -432,8 +437,6 @@ void StudentMainWindow::createCoursePage()
     // 添加到内容栈
     contentStack->addWidget(m_coursePage);
     coursePage = m_coursePage; // 保持兼容性
-
-    qDebug() << "学生端课程管理页面创建成功";
 }
 
 void StudentMainWindow::createSettingsPage()
@@ -518,7 +521,6 @@ void StudentMainWindow::onLogoutClicked()
     // 友管理页面会随主窗口自动销毁，无需手动关闭
 
     emit logoutRequested();
-    this->close();
 }
 
 void StudentMainWindow::setModernStyle()
@@ -710,34 +712,24 @@ void StudentMainWindow::onFriendDoubleClickedToChat(int friendId, const QString 
     qDebug() << "好友双击切换聊天功能执行完成";
 }
 
-void StudentMainWindow::onCourseEnrolled(int courseId)
-{
-    qDebug() << "学生端：选课成功，课程ID:" << courseId;
-    // 可以在这里添加成功提示或刷新相关数据
-}
-
-void StudentMainWindow::onEnrollmentProcessed(int studentId, int courseId, bool approved)
-{
-    Q_UNUSED(studentId)
-    Q_UNUSED(courseId)
-    if (approved) {
-        qDebug() << "学生端：选课申请已通过";
-        // 可以显示通知
-    } else {
-        qDebug() << "学生端：选课申请被拒绝";
-    }
-}
-
-void StudentMainWindow::onNoticePublished(int courseId, const QString &title)
+void StudentMainWindow::onEnrollmentSubmitted(int courseId)
 {
     Q_UNUSED(courseId)
-    qDebug() << "学生端：收到新通知:" << title;
-    // 可以显示通知提醒
+    // 选课申请提交成功后的处理
+    qDebug() << "学生选课申请已提交，课程ID:" << courseId;
+    // 可以在这里添加通知或刷新其他相关界面
 }
 
-void StudentMainWindow::onAssignmentPublished(int courseId, const QString &title)
+void StudentMainWindow::onNoticePublished(int courseId)
 {
     Q_UNUSED(courseId)
-    qDebug() << "学生端：收到新作业:" << title;
-    // 可以显示作业提醒
+    // 通知发布后的处理（学生端通常不会发布通知）
+    qDebug() << "课程通知状态更新，课程ID:" << courseId;
+}
+
+void StudentMainWindow::onAssignmentPublished(int courseId)
+{
+    Q_UNUSED(courseId)
+    // 作业发布后的处理（学生端通常不会发布作业）
+    qDebug() << "课程作业状态更新，课程ID:" << courseId;
 }

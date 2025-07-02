@@ -7,7 +7,7 @@
 
 ExamTaking::ExamTaking(Database *database, int examId, int studentId, QWidget *parent)
     : QWidget(parent), database(database), examId(examId), studentId(studentId),
-    currentQuestionIndex(0), isAnswerChanged(false), isExamSubmitted(false)
+    currentQuestionIndex(0), isAnswerChanged(false), isExamSubmitted(false), answerInputWidget(nullptr)
 {
     // 检查考试是否已提交
     if (database && database->hasStudentSubmittedExam(studentId, examId)) {

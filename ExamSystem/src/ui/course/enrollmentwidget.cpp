@@ -1,833 +1,434 @@
 #include "enrollmentwidget.h"
-#include <QDebug>
-#include <QSqlQuery>
-#include <QSqlError>
+#include "../../models/course.h"
+#include "../../models/enrollmentrequest.h"
+#include <QMessageBox>
+#include <QTimer>
 
-EnrollmentWidget::EnrollmentWidget(Database *database, int userId, UserType userType, QWidget *parent)
-    : QWidget(parent), m_database(database), m_userId(userId), m_userType(userType),
-    m_selectedCourseId(-1), m_totalCourses(0), m_enrolledCourses(0),
-    m_pendingApplications(0), m_totalRequests(0), m_approvedRequests(0)
+EnrollmentWidget::EnrollmentWidget(Database *database, int studentId, QWidget *parent)
+    : QWidget(parent)
+    , m_database(database)
+    , m_studentId(studentId)
+    , m_selectedCourseId(-1)
 {
     setupUI();
-
-    // 设置定时器
-    m_refreshTimer = new QTimer(this);
-    connect(m_refreshTimer, &QTimer::timeout, this, &EnrollmentWidget::autoRefresh);
-    m_refreshTimer->start(60000); // 60秒自动刷新
-
-    // 初始加载数据
+    setupStyles();
     refreshData();
-}
-
-EnrollmentWidget::~EnrollmentWidget()
-{
-    if (m_refreshTimer) {
-        m_refreshTimer->stop();
-    }
 }
 
 void EnrollmentWidget::setupUI()
 {
-    setObjectName("EnrollmentWidget");
-
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setContentsMargins(10, 10, 10, 10);
+    m_mainLayout->setContentsMargins(20, 20, 20, 20);
     m_mainLayout->setSpacing(10);
 
-    // 根据用户类型设置不同UI
-    if (m_userType == STUDENT) {
-        setupStudentUI();
-    } else {
-        setupTeacherUI();
-    }
+    // 创建标签页
+    m_tabWidget = new QTabWidget();
+    setupAvailableCoursesTab();
+    setupMyCoursesTab();
 
-    // 应用样式
-    setStyleSheet(R"(
-        QWidget#EnrollmentWidget {
-            background-color: #f8f9fa;
-        }
+    m_mainLayout->addWidget(m_tabWidget);
 
-        QTableWidget {
-            gridline-color: #dee2e6;
-            background-color: white;
-            alternate-background-color: #f8f9fa;
-            selection-background-color: #3498db;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-        }
-
-        QTableWidget::item {
-            padding: 8px;
-            border-bottom: 1px solid #dee2e6;
-        }
-
-        QTableWidget::item:selected {
-            background-color: #3498db;
-            color: white;
-        }
-
-        QHeaderView::section {
-            background-color: #6c757d;
-            color: white;
-            padding: 10px;
-            border: none;
-            font-weight: bold;
-        }
-
-        QPushButton {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        QPushButton:hover {
-            background-color: #0056b3;
-        }
-
-        QPushButton:pressed {
-            background-color: #004085;
-        }
-
-        QPushButton:disabled {
-            background-color: #6c757d;
-        }
-
-        QPushButton#ApproveButton {
-            background-color: #28a745;
-        }
-
-        QPushButton#ApproveButton:hover {
-            background-color: #1e7e34;
-        }
-
-        QPushButton#RejectButton {
-            background-color: #dc3545;
-        }
-
-        QPushButton#RejectButton:hover {
-            background-color: #bd2130;
-        }
-
-        QLineEdit, QComboBox {
-            padding: 8px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            background-color: white;
-        }
-
-        QLineEdit:focus, QComboBox:focus {
-            border-color: #3498db;
-            outline: none;
-        }
-
-        QGroupBox {
-            font-weight: bold;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            margin-top: 10px;
-            padding-top: 10px;
-        }
-
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 10px;
-            padding: 0 5px 0 5px;
-        }
-
-        QTextEdit {
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            background-color: white;
-            padding: 8px;
-        }
-    )");
+    connect(m_tabWidget, &QTabWidget::currentChanged, this, &EnrollmentWidget::onTabChanged);
 }
 
-void EnrollmentWidget::setupStudentUI()
+void EnrollmentWidget::setupAvailableCoursesTab()
 {
-    m_studentWidget = new QWidget();
-    m_studentLayout = new QVBoxLayout(m_studentWidget);
+    m_availableCoursesTab = new QWidget();
+    m_availableLayout = new QVBoxLayout(m_availableCoursesTab);
+    m_availableLayout->setContentsMargins(10, 10, 10, 10);
 
-    // 搜索和筛选区域
-    m_searchLayout = new QHBoxLayout();
+    // 搜索区域
+    QGroupBox *searchGroup = new QGroupBox("课程搜索");
+    m_searchLayout = new QHBoxLayout(searchGroup);
 
-    QLabel *searchLabel = new QLabel("搜索课程:");
-    m_searchEdit = new QLineEdit();
-    m_searchEdit->setPlaceholderText("输入课程名称或教师姓名...");
-    connect(m_searchEdit, &QLineEdit::textChanged, this, &EnrollmentWidget::onSearchTextChanged);
+    m_searchLineEdit = new QLineEdit();
+    m_searchLineEdit->setPlaceholderText("搜索课程名称或教师姓名...");
+    m_searchButton = new QPushButton("🔍 搜索");
+    m_collegeFilterCombo = new QComboBox();
+    m_collegeFilterCombo->addItem("全部学院");
+    m_collegeFilterCombo->addItem("计算机学院");
+    m_collegeFilterCombo->addItem("数学学院");
+    m_collegeFilterCombo->addItem("软件学院");
 
-    QLabel *collegeLabel = new QLabel("学院筛选:");
-    m_collegeFilter = new QComboBox();
-    m_collegeFilter->addItem("全部学院");
-    m_collegeFilter->addItem("计算机学院");
-    m_collegeFilter->addItem("数学学院");
-    m_collegeFilter->addItem("软件学院");
-    connect(m_collegeFilter, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &EnrollmentWidget::onSearchTextChanged);
+    m_searchLayout->addWidget(new QLabel("学院:"));
+    m_searchLayout->addWidget(m_collegeFilterCombo);
+    m_searchLayout->addWidget(m_searchLineEdit);
+    m_searchLayout->addWidget(m_searchButton);
 
-    m_searchLayout->addWidget(searchLabel);
-    m_searchLayout->addWidget(m_searchEdit, 2);
-    m_searchLayout->addWidget(collegeLabel);
-    m_searchLayout->addWidget(m_collegeFilter, 1);
-    m_searchLayout->addStretch();
+    m_availableLayout->addWidget(searchGroup);
 
-    // 可选课程表格
-    m_courseTable = new QTableWidget();
-    m_courseTable->setColumnCount(7);
-    QStringList courseHeaders;
-    courseHeaders << "课程名称" << "教师" << "学院" << "学分" << "课时" << "已选/最大" << "状态";
-    m_courseTable->setHorizontalHeaderLabels(courseHeaders);
-    m_courseTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_courseTable->setAlternatingRowColors(true);
-    m_courseTable->horizontalHeader()->setStretchLastSection(true);
-    connect(m_courseTable, &QTableWidget::itemSelectionChanged,
-            this, &EnrollmentWidget::onCourseSelectionChanged);
+    // 课程列表
+    QGroupBox *courseGroup = new QGroupBox("可选课程");
+    QVBoxLayout *courseLayout = new QVBoxLayout(courseGroup);
 
-    // 课程详情组
-    m_courseDetailGroup = new QGroupBox("📋 课程详情");
-    m_courseDetailLabel = new QLabel("请选择课程查看详情");
-    m_courseDetailLabel->setWordWrap(true);
-    m_courseDetailLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    m_availableCoursesList = new QListWidget();
+    m_availableCoursesList->setSelectionMode(QAbstractItemView::SingleSelection);
+    courseLayout->addWidget(m_availableCoursesList);
 
-    QVBoxLayout *detailLayout = new QVBoxLayout(m_courseDetailGroup);
-    detailLayout->addWidget(m_courseDetailLabel);
+    // 操作区域
+    QHBoxLayout *actionLayout = new QHBoxLayout();
+    m_availableCountLabel = new QLabel("共0门课程");
+    m_applyButton = new QPushButton("📝 申请选课");
+    m_applyButton->setEnabled(false);
 
-    m_submitButton = new QPushButton("📝 提交选课申请");
-    m_submitButton->setEnabled(false);
-    connect(m_submitButton, &QPushButton::clicked, this, &EnrollmentWidget::onSubmitApplication);
-    detailLayout->addWidget(m_submitButton);
+    actionLayout->addWidget(m_availableCountLabel);
+    actionLayout->addStretch();
+    actionLayout->addWidget(m_applyButton);
 
-    // 我的申请状态
-    m_applicationGroup = new QGroupBox("📊 我的申请状态");
-    m_applicationTable = new QTableWidget();
-    m_applicationTable->setColumnCount(5);
-    QStringList appHeaders;
-    appHeaders << "课程名称" << "教师" << "申请时间" << "状态" << "备注";
-    m_applicationTable->setHorizontalHeaderLabels(appHeaders);
-    m_applicationTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_applicationTable->setAlternatingRowColors(true);
-    m_applicationTable->horizontalHeader()->setStretchLastSection(true);
+    courseLayout->addLayout(actionLayout);
+    m_availableLayout->addWidget(courseGroup);
 
-    QVBoxLayout *appLayout = new QVBoxLayout(m_applicationGroup);
-    appLayout->addWidget(m_applicationTable);
+    m_tabWidget->addTab(m_availableCoursesTab, "📚 可选课程");
 
-    // 统计信息和刷新按钮
-    m_statsGroup = new QGroupBox("📈 统计信息");
-    m_statsLabel = new QLabel();
-    m_refreshButton = new QPushButton("🔄 刷新数据");
-    connect(m_refreshButton, &QPushButton::clicked, this, &EnrollmentWidget::refreshData);
-
-    QVBoxLayout *statsLayout = new QVBoxLayout(m_statsGroup);
-    statsLayout->addWidget(m_statsLabel);
-    statsLayout->addWidget(m_refreshButton);
-
-    // 布局组装
-    m_splitter = new QSplitter(Qt::Horizontal);
-
-    QWidget *leftWidget = new QWidget();
-    QVBoxLayout *leftLayout = new QVBoxLayout(leftWidget);
-    leftLayout->addLayout(m_searchLayout);
-    leftLayout->addWidget(m_courseTable, 3);
-    leftLayout->addWidget(m_applicationGroup, 2);
-
-    QWidget *rightWidget = new QWidget();
-    QVBoxLayout *rightLayout = new QVBoxLayout(rightWidget);
-    rightLayout->addWidget(m_courseDetailGroup, 2);
-    rightLayout->addWidget(m_statsGroup, 1);
-
-    m_splitter->addWidget(leftWidget);
-    m_splitter->addWidget(rightWidget);
-    m_splitter->setSizes({600, 300});
-
-    m_studentLayout->addWidget(m_splitter);
-    m_mainLayout->addWidget(m_studentWidget);
+    // 连接信号槽
+    connect(m_searchButton, &QPushButton::clicked, this, &EnrollmentWidget::onCourseSearch);
+    connect(m_searchLineEdit, &QLineEdit::textChanged, this, &EnrollmentWidget::onSearchTextChanged);
+    connect(m_collegeFilterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &EnrollmentWidget::onCourseSearch);
+    connect(m_availableCoursesList, &QListWidget::itemSelectionChanged, [this]() {
+        QListWidgetItem *item = m_availableCoursesList->currentItem();
+        if (item) {
+            m_selectedCourseId = item->data(Qt::UserRole).toInt();
+            m_applyButton->setEnabled(true);
+        } else {
+            m_selectedCourseId = -1;
+            m_applyButton->setEnabled(false);
+        }
+    });
+    connect(m_availableCoursesList, &QListWidget::itemDoubleClicked,
+            this, &EnrollmentWidget::onCourseDoubleClicked);
+    connect(m_applyButton, &QPushButton::clicked, this, &EnrollmentWidget::onApplyForCourse);
 }
 
-void EnrollmentWidget::setupTeacherUI()
+void EnrollmentWidget::setupMyCoursesTab()
 {
-    m_teacherWidget = new QWidget();
-    m_teacherLayout = new QVBoxLayout(m_teacherWidget);
+    m_myCoursesTab = new QWidget();
+    m_myCoursesLayout = new QVBoxLayout(m_myCoursesTab);
+    m_myCoursesLayout->setContentsMargins(10, 10, 10, 10);
 
-    // 筛选区域
-    m_filterLayout = new QHBoxLayout();
+    // 我的选课列表
+    QGroupBox *myCoursesGroup = new QGroupBox("我的选课");
+    QVBoxLayout *myCoursesGroupLayout = new QVBoxLayout(myCoursesGroup);
 
-    QLabel *statusLabel = new QLabel("状态筛选:");
-    m_statusFilter = new QComboBox();
-    m_statusFilter->addItem("全部申请");
-    m_statusFilter->addItem("申请中");
-    m_statusFilter->addItem("已通过");
-    connect(m_statusFilter, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &EnrollmentWidget::refreshData);
+    m_myCoursesList = new QListWidget();
+    myCoursesGroupLayout->addWidget(m_myCoursesList);
 
-    QLabel *courseLabel = new QLabel("课程筛选:");
-    m_courseFilter = new QComboBox();
-    m_courseFilter->addItem("全部课程");
-    connect(m_courseFilter, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &EnrollmentWidget::refreshData);
+    // 操作区域
+    QHBoxLayout *myActionLayout = new QHBoxLayout();
+    m_myCoursesCountLabel = new QLabel("共0门课程");
+    m_refreshButton = new QPushButton("🔄 刷新");
 
-    m_filterLayout->addWidget(statusLabel);
-    m_filterLayout->addWidget(m_statusFilter, 1);
-    m_filterLayout->addWidget(courseLabel);
-    m_filterLayout->addWidget(m_courseFilter, 2);
-    m_filterLayout->addStretch();
+    myActionLayout->addWidget(m_myCoursesCountLabel);
+    myActionLayout->addStretch();
+    myActionLayout->addWidget(m_refreshButton);
 
-    // 申请列表表格
-    m_requestTable = new QTableWidget();
-    m_requestTable->setColumnCount(6);
-    QStringList requestHeaders;
-    requestHeaders << "学生姓名" << "学生年级" << "课程名称" << "申请时间" << "状态" << "操作";
-    m_requestTable->setHorizontalHeaderLabels(requestHeaders);
-    m_requestTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_requestTable->setAlternatingRowColors(true);
-    m_requestTable->horizontalHeader()->setStretchLastSection(true);
-    connect(m_requestTable, &QTableWidget::itemSelectionChanged,
-            this, &EnrollmentWidget::onRequestSelectionChanged);
+    myCoursesGroupLayout->addLayout(myActionLayout);
+    m_myCoursesLayout->addWidget(myCoursesGroup);
 
-    // 申请详情组
-    m_requestDetailGroup = new QGroupBox("📋 申请详情");
-    m_requestDetailText = new QTextEdit();
-    m_requestDetailText->setMaximumHeight(150);
-    m_requestDetailText->setReadOnly(true);
+    m_tabWidget->addTab(m_myCoursesTab, "📋 我的选课");
 
-    // 操作按钮
-    m_actionLayout = new QHBoxLayout();
-    m_approveButton = new QPushButton("✅ 批准申请");
-    m_approveButton->setObjectName("ApproveButton");
-    m_approveButton->setEnabled(false);
-    connect(m_approveButton, &QPushButton::clicked, this, &EnrollmentWidget::onApproveRequest);
-
-    m_rejectButton = new QPushButton("❌ 拒绝申请");
-    m_rejectButton->setObjectName("RejectButton");
-    m_rejectButton->setEnabled(false);
-    connect(m_rejectButton, &QPushButton::clicked, this, &EnrollmentWidget::onRejectRequest);
-
-    m_batchApproveButton = new QPushButton("✅ 批量批准");
-    m_batchApproveButton->setObjectName("ApproveButton");
-    connect(m_batchApproveButton, &QPushButton::clicked, this, &EnrollmentWidget::onBatchApprove);
-
-    m_batchRejectButton = new QPushButton("❌ 批量拒绝");
-    m_batchRejectButton->setObjectName("RejectButton");
-    connect(m_batchRejectButton, &QPushButton::clicked, this, &EnrollmentWidget::onBatchReject);
-
-    m_actionLayout->addWidget(m_approveButton);
-    m_actionLayout->addWidget(m_rejectButton);
-    m_actionLayout->addStretch();
-    m_actionLayout->addWidget(m_batchApproveButton);
-    m_actionLayout->addWidget(m_batchRejectButton);
-
-    QVBoxLayout *detailLayout = new QVBoxLayout(m_requestDetailGroup);
-    detailLayout->addWidget(m_requestDetailText);
-    detailLayout->addLayout(m_actionLayout);
-
-    // 统计信息
-    m_statsGroup = new QGroupBox("📈 审核统计");
-    m_statsLabel = new QLabel();
-    m_refreshButton = new QPushButton("🔄 刷新数据");
+    // 连接信号槽
     connect(m_refreshButton, &QPushButton::clicked, this, &EnrollmentWidget::refreshData);
+}
 
-    QVBoxLayout *statsLayout = new QVBoxLayout(m_statsGroup);
-    statsLayout->addWidget(m_statsLabel);
-    statsLayout->addWidget(m_refreshButton);
-
-    // 布局组装
-    m_splitter = new QSplitter(Qt::Horizontal);
-
-    QWidget *leftWidget = new QWidget();
-    QVBoxLayout *leftLayout = new QVBoxLayout(leftWidget);
-    leftLayout->addLayout(m_filterLayout);
-    leftLayout->addWidget(m_requestTable, 3);
-
-    QWidget *rightWidget = new QWidget();
-    QVBoxLayout *rightLayout = new QVBoxLayout(rightWidget);
-    rightLayout->addWidget(m_requestDetailGroup, 2);
-    rightLayout->addWidget(m_statsGroup, 1);
-
-    m_splitter->addWidget(leftWidget);
-    m_splitter->addWidget(rightWidget);
-    m_splitter->setSizes({700, 300});
-
-    m_teacherLayout->addWidget(m_splitter);
-    m_mainLayout->addWidget(m_teacherWidget);
+void EnrollmentWidget::setupStyles()
+{
+    this->setStyleSheet(
+        "QGroupBox {"
+        "    font-weight: bold;"
+        "    border: 1px solid #ddd;"
+        "    border-radius: 6px;"
+        "    margin-top: 6px;"
+        "    padding-top: 10px;"
+        "}"
+        "QGroupBox::title {"
+        "    subcontrol-origin: margin;"
+        "    left: 10px;"
+        "    padding: 0 5px 0 5px;"
+        "}"
+        "QListWidget {"
+        "    border: 1px solid #ddd;"
+        "    border-radius: 4px;"
+        "    background-color: white;"
+        "    alternate-background-color: #f8f9fa;"
+        "}"
+        "QListWidget::item {"
+        "    padding: 8px;"
+        "    border-bottom: 1px solid #eee;"
+        "    margin: 2px;"
+        "    border-radius: 4px;"
+        "}"
+        "QListWidget::item:selected {"
+        "    background-color: #e6f7ff;"
+        "    border: 2px solid #1890ff;"
+        "}"
+        "QListWidget::item:hover {"
+        "    background-color: #f0f0f0;"
+        "}"
+        "QPushButton {"
+        "    padding: 8px 16px;"
+        "    border: 1px solid #ddd;"
+        "    border-radius: 4px;"
+        "    background-color: #f8f9fa;"
+        "    font-size: 14px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #e8f4ff;"
+        "    border-color: #1890ff;"
+        "}"
+        "QPushButton:pressed {"
+        "    background-color: #1890ff;"
+        "    color: white;"
+        "}"
+        "QPushButton:disabled {"
+        "    background-color: #f5f5f5;"
+        "    color: #999;"
+        "    border-color: #ddd;"
+        "}"
+        "QLineEdit {"
+        "    padding: 8px;"
+        "    border: 1px solid #ddd;"
+        "    border-radius: 4px;"
+        "    font-size: 14px;"
+        "}"
+        "QLineEdit:focus {"
+        "    border-color: #1890ff;"
+        "}"
+        "QComboBox {"
+        "    padding: 8px;"
+        "    border: 1px solid #ddd;"
+        "    border-radius: 4px;"
+        "    background-color: white;"
+        "    font-size: 14px;"
+        "}"
+        );
 }
 
 void EnrollmentWidget::refreshData()
 {
-    if (!m_database) {
-        qDebug() << "数据库未连接";
-        return;
+    updateAvailableCourses();
+    updateMyCourses();
+}
+
+void EnrollmentWidget::updateAvailableCourses()
+{
+    if (!m_database) return;
+
+    // 获取所有课程
+    QList<Course> allCourses = m_database->getAllCourses();
+    m_availableCourses.clear();
+
+    for (const Course &course : allCourses) {
+        // 检查学生是否已选课
+        if (!m_database->isStudentEnrolled(m_studentId, course.getCourseId())) {
+            QVariantMap courseMap;
+            courseMap["course_id"] = course.getCourseId();
+            courseMap["course_name"] = course.getCourseName();
+            courseMap["teacher_name"] = course.getTeacherName();
+            courseMap["college"] = course.getCollege();
+            m_availableCourses.append(courseMap);
+        }
     }
 
-    if (m_userType == STUDENT) {
-        loadAvailableCourses();
-        loadMyApplications();
+    // 更新列表显示
+    m_availableCoursesList->clear();
+    for (const QVariantMap &course : m_availableCourses) {
+        createCourseListItem(course, m_availableCoursesList, false);
+    }
+
+    m_availableCountLabel->setText(QString("共%1门课程").arg(m_availableCourses.size()));
+}
+
+void EnrollmentWidget::updateMyCourses()
+{
+    if (!m_database) return;
+
+    m_myCourses = m_database->getStudentCourses(m_studentId);
+
+    // 更新列表显示
+    m_myCoursesList->clear();
+    for (const QVariantMap &course : m_myCourses) {
+        createCourseListItem(course, m_myCoursesList, true);
+    }
+
+    m_myCoursesCountLabel->setText(QString("共%1门课程").arg(m_myCourses.size()));
+}
+
+void EnrollmentWidget::createCourseListItem(const QVariantMap &course, QListWidget *listWidget, bool isEnrolled)
+{
+    QListWidgetItem *item = new QListWidgetItem();
+
+    QString courseName = course["course_name"].toString();
+    QString teacherName = course["teacher_name"].toString();
+    QString college = course["college"].toString();
+    int courseId = course["course_id"].toInt();
+
+    QString displayText;
+    QString statusText;
+
+    if (isEnrolled) {
+        QString enrollmentStatus = course["enrollment_status"].toString();
+        QDateTime enrollmentTime = course["enrollment_time"].toDateTime();
+
+        if (enrollmentStatus == "已通过") {
+            statusText = "✅ 已选课";
+        } else if (enrollmentStatus == "申请中") {
+            statusText = "⏳ 申请中";
+        }
+
+        displayText = QString("%1\n教师: %2 | 学院: %3\n状态: %4 | 选课时间: %5")
+                          .arg(courseName)
+                          .arg(teacherName)
+                          .arg(college)
+                          .arg(statusText)
+                          .arg(enrollmentTime.toString("yyyy-MM-dd hh:mm"));
     } else {
-        loadEnrollmentRequests();
-        // 加载课程筛选选项
-        QList<QVariantMap> courses = m_database->getCoursesByTeacher(m_userId);
-        m_courseFilter->clear();
-        m_courseFilter->addItem("全部课程");
-        for (const auto &course : courses) {
-            m_courseFilter->addItem(course["course_name"].toString(), course["course_id"].toInt());
+        // 检查是否有待处理申请
+        // 这里简化处理，实际应该检查数据库
+        displayText = QString("%1\n教师: %2 | 学院: %3\n状态: 可申请")
+                          .arg(courseName)
+                          .arg(teacherName)
+                          .arg(college);
+    }
+
+    item->setText(displayText);
+    item->setData(Qt::UserRole, courseId);
+
+    // 设置不同状态的颜色
+    if (isEnrolled) {
+        QString enrollmentStatus = course["enrollment_status"].toString();
+        if (enrollmentStatus == "已通过") {
+            item->setBackground(QBrush(QColor(240, 255, 240))); // 浅绿色
+        } else if (enrollmentStatus == "申请中") {
+            item->setBackground(QBrush(QColor(255, 248, 220))); // 浅黄色
         }
     }
 
-    updateStatistics();
-    qDebug() << "选课管理数据刷新完成";
+    listWidget->addItem(item);
 }
 
-void EnrollmentWidget::loadAvailableCourses()
+void EnrollmentWidget::onApplyForCourse()
 {
-    m_availableCourses = m_database->getAvailableCourses(m_userId);
-    updateCourseTable();
-}
-
-void EnrollmentWidget::loadEnrollmentRequests()
-{
-    // 检查是否为选课管理员
-    if (!m_database->isTeacherCourseAdmin(m_userId)) {
-        QMessageBox::warning(this, "权限不足", "只有选课管理员才能审核选课申请！");
+    if (m_selectedCourseId <= 0 || !m_database) {
+        showMessage("请先选择一门课程", true);
         return;
     }
 
-    QList<QVariantMap> requestData = m_database->getEnrollmentRequests(m_userId);
-    m_enrollmentRequests.clear();
+    // 确认对话框
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this, "确认申请",
+        "确定要申请选修这门课程吗？\n提交后需要等待选课管理员审核。",
+        QMessageBox::Yes | QMessageBox::No);
 
-    for (const auto &data : requestData) {
-        EnrollmentRequest request(
-            data["student_id"].toInt(),
-            data["course_id"].toInt(),
-            data["enrollment_time"].toDateTime(),
-            EnrollmentRequest::statusFromString(data["enrollment_status"].toString()),
-            data["student_name"].toString(),
-            data["student_grade"].toString(),
-            data["student_college"].toString(),
-            data["course_name"].toString(),
-            data["course_college"].toString(),
-            data["teacher_name"].toString()
-            );
-        m_enrollmentRequests.append(request);
-    }
-
-    updateRequestTable();
-}
-
-void EnrollmentWidget::loadMyApplications()
-{
-    m_myApplications = m_database->getCoursesByStudent(m_userId, true);
-    updateApplicationTable();
-}
-
-void EnrollmentWidget::updateCourseTable()
-{
-    m_courseTable->setRowCount(m_availableCourses.size());
-
-    for (int i = 0; i < m_availableCourses.size(); ++i) {
-        const QVariantMap &course = m_availableCourses[i];
-
-        m_courseTable->setItem(i, 0, new QTableWidgetItem(course["course_name"].toString()));
-        m_courseTable->setItem(i, 1, new QTableWidgetItem(course["teacher_name"].toString()));
-        m_courseTable->setItem(i, 2, new QTableWidgetItem(course["college"].toString()));
-        m_courseTable->setItem(i, 3, new QTableWidgetItem(course["credits"].toString()));
-        m_courseTable->setItem(i, 4, new QTableWidgetItem(course["course_hours"].toString()));
-
-        QString capacityText = QString("%1/%2")
-                                   .arg(course["enrolled_count"].toInt())
-                                   .arg(course["max_students"].toInt());
-        m_courseTable->setItem(i, 5, new QTableWidgetItem(capacityText));
-        m_courseTable->setItem(i, 6, new QTableWidgetItem("可申请"));
-
-        // 存储课程ID
-        m_courseTable->item(i, 0)->setData(Qt::UserRole, course["course_id"]);
-    }
-
-    m_courseTable->resizeColumnsToContents();
-}
-
-void EnrollmentWidget::updateRequestTable()
-{
-    m_requestTable->setRowCount(m_enrollmentRequests.size());
-
-    for (int i = 0; i < m_enrollmentRequests.size(); ++i) {
-        const EnrollmentRequest &request = m_enrollmentRequests[i];
-
-        m_requestTable->setItem(i, 0, new QTableWidgetItem(request.getStudentName()));
-        m_requestTable->setItem(i, 1, new QTableWidgetItem(request.getStudentGrade()));
-        m_requestTable->setItem(i, 2, new QTableWidgetItem(request.getCourseName()));
-        m_requestTable->setItem(i, 3, new QTableWidgetItem(request.getEnrollmentTimeText()));
-
-        QTableWidgetItem *statusItem = new QTableWidgetItem(request.getStatusText());
-        statusItem->setForeground(QColor(request.getStatusColor()));
-        m_requestTable->setItem(i, 4, statusItem);
-
-        QString actionText = request.isPending() ? "待处理" : "已处理";
-        m_requestTable->setItem(i, 5, new QTableWidgetItem(actionText));
-    }
-
-    m_requestTable->resizeColumnsToContents();
-}
-
-void EnrollmentWidget::updateApplicationTable()
-{
-    // 只显示申请记录
-    QList<QVariantMap> applications;
-    for (const auto &course : m_myApplications) {
-        if (course["enrollment_status"].toString() != "已通过") {
-            applications.append(course);
-        }
-    }
-
-    m_applicationTable->setRowCount(applications.size());
-
-    for (int i = 0; i < applications.size(); ++i) {
-        const QVariantMap &app = applications[i];
-
-        m_applicationTable->setItem(i, 0, new QTableWidgetItem(app["course_name"].toString()));
-        m_applicationTable->setItem(i, 1, new QTableWidgetItem(app["teacher_name"].toString()));
-        m_applicationTable->setItem(i, 2, new QTableWidgetItem(
-                                              app["enrollment_time"].toDateTime().toString("yyyy-MM-dd hh:mm")));
-
-        QString status = app["enrollment_status"].toString();
-        QTableWidgetItem *statusItem = new QTableWidgetItem(status);
-        if (status == "申请中") {
-            statusItem->setForeground(QColor("#f39c12"));
-        } else {
-            statusItem->setForeground(QColor("#27ae60"));
-        }
-        m_applicationTable->setItem(i, 3, statusItem);
-        m_applicationTable->setItem(i, 4, new QTableWidgetItem("等待审核"));
-    }
-
-    m_applicationTable->resizeColumnsToContents();
-}
-
-void EnrollmentWidget::updateStatistics()
-{
-    QString statsText;
-
-    if (m_userType == STUDENT) {
-        m_totalCourses = m_availableCourses.size();
-        m_enrolledCourses = 0;
-        m_pendingApplications = 0;
-
-        for (const auto &course : m_myApplications) {
-            if (course["enrollment_status"].toString() == "已通过") {
-                m_enrolledCourses++;
-            } else if (course["enrollment_status"].toString() == "申请中") {
-                m_pendingApplications++;
-            }
-        }
-
-        statsText = QString("可选课程: %1门\n已选课程: %2门\n申请中: %3门")
-                        .arg(m_totalCourses)
-                        .arg(m_enrolledCourses)
-                        .arg(m_pendingApplications);
-    } else {
-        m_totalRequests = m_enrollmentRequests.size();
-        m_approvedRequests = 0;
-
-        for (const auto &request : m_enrollmentRequests) {
-            if (request.isApproved()) {
-                m_approvedRequests++;
-            }
-        }
-
-        int pendingRequests = m_totalRequests - m_approvedRequests;
-
-        statsText = QString("总申请数: %1条\n待处理: %2条\n已处理: %3条")
-                        .arg(m_totalRequests)
-                        .arg(pendingRequests)
-                        .arg(m_approvedRequests);
-    }
-
-    m_statsLabel->setText(statsText);
-}
-
-void EnrollmentWidget::onCourseSelectionChanged()
-{
-    int row = m_courseTable->currentRow();
-    if (row < 0 || row >= m_availableCourses.size()) {
-        m_selectedCourseId = -1;
-        m_submitButton->setEnabled(false);
-        m_courseDetailLabel->setText("请选择课程查看详情");
-        return;
-    }
-
-    m_selectedCourseId = m_courseTable->item(row, 0)->data(Qt::UserRole).toInt();
-    showCourseDetails(m_selectedCourseId);
-    m_submitButton->setEnabled(true);
-}
-
-void EnrollmentWidget::onRequestSelectionChanged()
-{
-    int row = m_requestTable->currentRow();
-    if (row < 0 || row >= m_enrollmentRequests.size()) {
-        m_approveButton->setEnabled(false);
-        m_rejectButton->setEnabled(false);
-        m_requestDetailText->clear();
-        return;
-    }
-
-    m_selectedRequest = m_enrollmentRequests[row];
-    showRequestDetails(m_selectedRequest);
-
-    bool canProcess = m_selectedRequest.isPending();
-    m_approveButton->setEnabled(canProcess);
-    m_rejectButton->setEnabled(canProcess);
-}
-
-void EnrollmentWidget::showCourseDetails(int courseId)
-{
-    for (const auto &course : m_availableCourses) {
-        if (course["course_id"].toInt() == courseId) {
-            QString details = QString(
-                                  "课程名称: %1\n"
-                                  "任课教师: %2\n"
-                                  "开课学院: %3\n"
-                                  "学分: %4\n"
-                                  "课时: %5\n"
-                                  "开课学期: %6\n"
-                                  "课程描述: %7\n"
-                                  "选课情况: %8/%9人\n"
-                                  "课程状态: %10"
-                                  ).arg(course["course_name"].toString())
-                                  .arg(course["teacher_name"].toString())
-                                  .arg(course["college"].toString())
-                                  .arg(course["credits"].toInt())
-                                  .arg(course["course_hours"].toInt())
-                                  .arg(course["semester"].toString())
-                                  .arg(course["description"].toString())
-                                  .arg(course["enrolled_count"].toInt())
-                                  .arg(course["max_students"].toInt())
-                                  .arg("开放选课");
-
-            m_courseDetailLabel->setText(details);
-            break;
-        }
-    }
-}
-
-void EnrollmentWidget::showRequestDetails(const EnrollmentRequest &request)
-{
-    QString details = QString(
-                          "申请详情:\n\n"
-                          "学生信息:\n"
-                          "姓名: %1\n"
-                          "年级: %2\n"
-                          "学院: %3\n\n"
-                          "课程信息:\n"
-                          "课程名称: %4\n"
-                          "开课学院: %5\n"
-                          "任课教师: %6\n\n"
-                          "申请信息:\n"
-                          "申请时间: %7\n"
-                          "当前状态: %8\n"
-                          "相对时间: %9"
-                          ).arg(request.getStudentName())
-                          .arg(request.getStudentGrade())
-                          .arg(request.getStudentCollege())
-                          .arg(request.getCourseName())
-                          .arg(request.getCourseCollege())
-                          .arg(request.getTeacherName())
-                          .arg(request.getEnrollmentTimeText())
-                          .arg(request.getStatusText())
-                          .arg(request.getRelativeTimeText());
-
-    m_requestDetailText->setText(details);
-}
-
-void EnrollmentWidget::onSubmitApplication()
-{
-    if (m_selectedCourseId <= 0) {
-        QMessageBox::warning(this, "提示", "请先选择要申请的课程！");
-        return;
-    }
-
-    if (!validateEnrollment(m_selectedCourseId)) {
+    if (reply != QMessageBox::Yes) {
         return;
     }
 
     // 提交选课申请
-    if (m_database->submitEnrollmentRequest(m_userId, m_selectedCourseId)) {
-        QMessageBox::information(this, "成功", "选课申请提交成功！请等待审核。");
+    if (m_database->applyForCourse(m_studentId, m_selectedCourseId)) {
+        showMessage("选课申请提交成功！请等待审核。");
         emit enrollmentSubmitted(m_selectedCourseId);
-        refreshData();
+
+        // 刷新数据
+        QTimer::singleShot(500, this, &EnrollmentWidget::refreshData);
+
+        // 切换到我的选课标签页
+        m_tabWidget->setCurrentIndex(1);
     } else {
-        QMessageBox::critical(this, "失败", "选课申请提交失败！请检查是否已申请该课程或课程已满员。");
+        showMessage("选课申请失败，请重试", true);
     }
 }
 
-void EnrollmentWidget::onApproveRequest()
+void EnrollmentWidget::onCourseSearch()
 {
-    if (!m_selectedRequest.isValid() || !m_selectedRequest.isPending()) {
-        QMessageBox::warning(this, "提示", "请选择有效的待处理申请！");
-        return;
-    }
+    QString searchText = m_searchLineEdit->text().trimmed();
+    QString selectedCollege = m_collegeFilterCombo->currentText();
 
-    int ret = QMessageBox::question(this, "确认操作",
-                                    QString("确定要批准 %1 的选课申请吗？\n课程：%2")
-                                        .arg(m_selectedRequest.getStudentName())
-                                        .arg(m_selectedRequest.getCourseName()),
-                                    QMessageBox::Yes | QMessageBox::No);
+    // 过滤课程列表
+    m_availableCoursesList->clear();
 
-    if (ret == QMessageBox::Yes) {
-        if (m_database->processEnrollmentRequest(m_selectedRequest.getStudentId(),
-                                                 m_selectedRequest.getCourseId(),
-                                                 true, m_userId)) {
-            QMessageBox::information(this, "成功", "申请已批准！");
-            emit requestProcessed(m_selectedRequest.getStudentId(), m_selectedRequest.getCourseId(), true);
-            refreshData();
-        } else {
-            QMessageBox::critical(this, "失败", "批准申请失败！请检查课程是否已满员。");
-        }
-    }
-}
+    for (const QVariantMap &course : m_availableCourses) {
+        bool matches = true;
 
-void EnrollmentWidget::onRejectRequest()
-{
-    if (!m_selectedRequest.isValid() || !m_selectedRequest.isPending()) {
-        QMessageBox::warning(this, "提示", "请选择有效的待处理申请！");
-        return;
-    }
-
-    int ret = QMessageBox::question(this, "确认操作",
-                                    QString("确定要拒绝 %1 的选课申请吗？\n课程：%2")
-                                        .arg(m_selectedRequest.getStudentName())
-                                        .arg(m_selectedRequest.getCourseName()),
-                                    QMessageBox::Yes | QMessageBox::No);
-
-    if (ret == QMessageBox::Yes) {
-        if (m_database->processEnrollmentRequest(m_selectedRequest.getStudentId(),
-                                                 m_selectedRequest.getCourseId(),
-                                                 false, m_userId)) {
-            QMessageBox::information(this, "成功", "申请已拒绝！");
-            emit requestProcessed(m_selectedRequest.getStudentId(), m_selectedRequest.getCourseId(), false);
-            refreshData();
-        } else {
-            QMessageBox::critical(this, "失败", "拒绝申请失败！");
-        }
-    }
-}
-
-void EnrollmentWidget::onBatchApprove()
-{
-    processSelectedRequests(true);
-}
-
-void EnrollmentWidget::onBatchReject()
-{
-    processSelectedRequests(false);
-}
-
-void EnrollmentWidget::processSelectedRequests(bool approve)
-{
-    QList<QTableWidgetItem*> selectedItems = m_requestTable->selectedItems();
-    if (selectedItems.isEmpty()) {
-        QMessageBox::warning(this, "提示", "请先选择要处理的申请！");
-        return;
-    }
-
-    // 获取选中的行
-    QSet<int> selectedRows;
-    for (QTableWidgetItem* item : selectedItems) {
-        selectedRows.insert(item->row());
-    }
-
-    // 检查是否有待处理的申请
-    QList<EnrollmentRequest> pendingRequests;
-    for (int row : selectedRows) {
-        if (row < m_enrollmentRequests.size() && m_enrollmentRequests[row].isPending()) {
-            pendingRequests.append(m_enrollmentRequests[row]);
-        }
-    }
-
-    if (pendingRequests.isEmpty()) {
-        QMessageBox::warning(this, "提示", "所选申请中没有待处理的记录！");
-        return;
-    }
-
-    QString action = approve ? "批准" : "拒绝";
-    int ret = QMessageBox::question(this, "确认操作",
-                                    QString("确定要%1选中的 %2 条申请吗？")
-                                        .arg(action).arg(pendingRequests.size()),
-                                    QMessageBox::Yes | QMessageBox::No);
-
-    if (ret == QMessageBox::Yes) {
-        int successCount = 0;
-        for (const EnrollmentRequest &request : pendingRequests) {
-            if (m_database->processEnrollmentRequest(request.getStudentId(),
-                                                     request.getCourseId(),
-                                                     approve, m_userId)) {
-                successCount++;
-                emit requestProcessed(request.getStudentId(), request.getCourseId(), approve);
+        // 学院过滤
+        if (selectedCollege != "全部学院") {
+            if (course["college"].toString() != selectedCollege) {
+                matches = false;
             }
         }
 
-        QMessageBox::information(this, "完成",
-                                 QString("成功%1了 %2/%3 条申请！")
-                                     .arg(action).arg(successCount).arg(pendingRequests.size()));
-        refreshData();
-    }
-}
+        // 关键词搜索
+        if (!searchText.isEmpty() && matches) {
+            QString courseName = course["course_name"].toString();
+            QString teacherName = course["teacher_name"].toString();
 
-bool EnrollmentWidget::validateEnrollment(int courseId)
-{
-    // 检查是否已选择或申请该课程
-    int status = m_database->getEnrollmentStatus(m_userId, courseId);
-    if (status == 1) {
-        QMessageBox::warning(this, "提示", "您已经选择了该课程！");
-        return false;
-    } else if (status == 2) {
-        QMessageBox::warning(this, "提示", "您已经申请了该课程，请等待审核！");
-        return false;
-    }
-
-    // 检查课程是否还有名额
-    for (const auto &course : m_availableCourses) {
-        if (course["course_id"].toInt() == courseId) {
-            int enrolled = course["enrolled_count"].toInt();
-            int maxStudents = course["max_students"].toInt();
-            if (enrolled >= maxStudents) {
-                QMessageBox::warning(this, "提示", "该课程已满员，无法申请！");
-                return false;
+            if (!courseName.contains(searchText, Qt::CaseInsensitive) &&
+                !teacherName.contains(searchText, Qt::CaseInsensitive)) {
+                matches = false;
             }
-            break;
+        }
+
+        if (matches) {
+            createCourseListItem(course, m_availableCoursesList, false);
         }
     }
 
-    return true;
+    int filteredCount = m_availableCoursesList->count();
+    m_availableCountLabel->setText(QString("共%1门课程").arg(filteredCount));
+}
+
+void EnrollmentWidget::onTabChanged(int index)
+{
+    // 切换标签页时刷新数据
+    if (index == 0) {
+        updateAvailableCourses();
+    } else if (index == 1) {
+        updateMyCourses();
+    }
+}
+
+void EnrollmentWidget::onCourseDoubleClicked(QListWidgetItem *item)
+{
+    if (item && m_tabWidget->currentIndex() == 0) {
+        // 在可选课程标签页双击时自动申请
+        m_selectedCourseId = item->data(Qt::UserRole).toInt();
+        onApplyForCourse();
+    }
 }
 
 void EnrollmentWidget::onSearchTextChanged()
 {
-    // 简单的筛选实现
-    QString searchText = m_searchEdit->text().toLower();
-    QString selectedCollege = m_collegeFilter->currentText();
+    // 延迟搜索，避免频繁查询
+    static QTimer *searchTimer = nullptr;
+    if (!searchTimer) {
+        searchTimer = new QTimer(this);
+        searchTimer->setSingleShot(true);
+        searchTimer->setInterval(500);
+        connect(searchTimer, &QTimer::timeout, this, &EnrollmentWidget::onCourseSearch);
+    }
 
-    for (int i = 0; i < m_courseTable->rowCount(); ++i) {
-        bool visible = true;
+    searchTimer->start();
+}
 
-        // 搜索文本筛选
-        if (!searchText.isEmpty()) {
-            QString courseName = m_courseTable->item(i, 0)->text().toLower();
-            QString teacherName = m_courseTable->item(i, 1)->text().toLower();
-            visible = courseName.contains(searchText) || teacherName.contains(searchText);
-        }
-
-        // 学院筛选
-        if (visible && selectedCollege != "全部学院") {
-            QString courseCollege = m_courseTable->item(i, 2)->text();
-            visible = (courseCollege == selectedCollege);
-        }
-
-        m_courseTable->setRowHidden(i, !visible);
+void EnrollmentWidget::showMessage(const QString &message, bool isError)
+{
+    if (isError) {
+        QMessageBox::warning(this, "提示", message);
+    } else {
+        QMessageBox::information(this, "提示", message);
     }
 }
 
-void EnrollmentWidget::autoRefresh()
+void EnrollmentWidget::showAvailableCourses()
 {
-    // 静默刷新统计信息
-    updateStatistics();
+    // 切换到可选课程标签页
+    m_tabWidget->setCurrentIndex(0);
+    updateAvailableCourses();
+}
+
+void EnrollmentWidget::showMyCourses()
+{
+    // 切换到我的选课标签页
+    m_tabWidget->setCurrentIndex(1);
+    updateMyCourses();
 }

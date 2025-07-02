@@ -1,545 +1,408 @@
 #include "coursepage.h"
-#include <QDebug>
+#include "enrollmentwidget.h"
+#include "enrollmentadminwidget.h"
+#include "coursenoticewidget.h"
+#include "courseassignmentwidget.h"
+#include "../../models/course.h"  // 添加Course类的完整定义
 #include <QMessageBox>
-#include <QListWidgetItem>
+#include "mycourseswidget.h"
 
-CoursePage::CoursePage(Database *database, int userId, UserType userType, QWidget *parent)
-    : QWidget(parent), m_database(database), m_userId(userId), m_userType(userType),
-    m_currentCourseId(-1), m_currentPage(PAGE_MY_COURSES), m_currentSubPage(SUBPAGE_NOTICE),
-    m_totalCourses(0), m_pendingRequests(0), m_unreadNotices(0), m_pendingAssignments(0),
-    m_enrollmentWidget(nullptr), m_noticeWidget(nullptr), m_assignmentWidget(nullptr)
+CoursePage::CoursePage(Database *database, int userId, const QString &userType, QWidget *parent)
+    : QWidget(parent)
+    , m_database(database)
+    , m_currentUserId(userId)
+    , m_currentUserType(userType)
+    , m_isCourseAdmin(false)
+    , m_isTeacher(userType == "老师")
+    , m_enrollmentWidget(nullptr)
+    , m_enrollmentAdminWidget(nullptr)
+    , m_courseNoticeWidget(nullptr)
+    , m_courseAssignmentWidget(nullptr)
+    , m_enrolledCourseCount(0)
+    , m_pendingEnrollmentCount(0)
+    , m_unreadNoticeCount(0)
+    , m_assignmentCount(0)
+    , m_enrollmentBtn(nullptr)
+    , m_noticesBtn(nullptr)
+    , m_assignmentsBtn(nullptr)
+    , m_enrollmentAdminBtn(nullptr)
+    , m_myCoursesWidget(nullptr)
+    , m_myCoursesBtn(nullptr)
 {
+    checkUserPermissions();
     setupUI();
+    setupStyles();
 
     // 设置定时器
     m_refreshTimer = new QTimer(this);
+    m_refreshTimer->setInterval(30000); // 30秒刷新一次
     connect(m_refreshTimer, &QTimer::timeout, this, &CoursePage::autoRefresh);
-    m_refreshTimer->start(30000); // 30秒自动刷新
+    m_refreshTimer->start();
 
     // 初始加载数据
-    refreshData();
+    refreshAll();
+    // 默认显示我的课程页面
+    showMyCourses();
 }
 
 CoursePage::~CoursePage()
 {
     if (m_refreshTimer) {
         m_refreshTimer->stop();
+        m_refreshTimer->deleteLater();  // 使用 deleteLater 而不是直接 delete
+        m_refreshTimer = nullptr;
     }
 }
 
 void CoursePage::setupUI()
 {
-    setObjectName("CoursePage");
-
     m_mainLayout = new QHBoxLayout(this);
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
     m_mainLayout->setSpacing(0);
 
+    // 创建分割器
     m_splitter = new QSplitter(Qt::Horizontal, this);
-    m_splitter->setObjectName("CoursePageSplitter");
-
-    createNavigationPanel();
-    createContentArea();
-
-    // 设置分割器比例
-    m_splitter->addWidget(m_navigationWidget);
-    m_splitter->addWidget(m_contentWidget);
-    m_splitter->addWidget(m_detailWidget);
-    m_splitter->setStretchFactor(0, 0); // 导航栏固定宽度
-    m_splitter->setStretchFactor(1, 1); // 内容区域可伸缩
-    m_splitter->setStretchFactor(2, 1); // 详情区域可伸缩
-    m_splitter->setSizes({220, 400, 400});
-
     m_mainLayout->addWidget(m_splitter);
 
-    // 根据用户类型设置UI
-    if (m_userType == STUDENT) {
-        setupStudentUI();
-    } else {
-        setupTeacherUI();
-    }
+    setupNavigation();
+    setupContentPages();
 
-    // 应用样式
-    setStyleSheet(R"(
-        QWidget#CoursePage {
-            background-color: #f5f5f5;
-        }
-
-        QSplitter#CoursePageSplitter::handle {
-            background-color: #ddd;
-            width: 1px;
-        }
-
-        QSplitter#CoursePageSplitter::handle:hover {
-            background-color: #3498db;
-        }
-
-        QWidget#NavigationWidget {
-            background-color: #34495e;
-            border-right: 1px solid #2c3e50;
-        }
-
-        QListWidget#NavigationList {
-            background-color: transparent;
-            border: none;
-            outline: none;
-            font-size: 14px;
-            color: #ecf0f1;
-        }
-
-        QListWidget#NavigationList::item {
-            padding: 12px 15px;
-            border-bottom: 1px solid #2c3e50;
-        }
-
-        QListWidget#NavigationList::item:hover {
-            background-color: #3498db;
-        }
-
-        QListWidget#NavigationList::item:selected {
-            background-color: #2980b9;
-            font-weight: bold;
-        }
-
-        QGroupBox#StatisticsGroup {
-            color: #ecf0f1;
-            font-size: 12px;
-            border: 1px solid #2c3e50;
-            border-radius: 5px;
-            margin-top: 10px;
-            padding-top: 10px;
-        }
-
-        QGroupBox#StatisticsGroup::title {
-            subcontrol-origin: margin;
-            left: 10px;
-            padding: 0 5px 0 5px;
-        }
-
-        QPushButton#RefreshButton {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 4px;
-            font-size: 12px;
-        }
-
-        QPushButton#RefreshButton:hover {
-            background-color: #2980b9;
-        }
-
-        QPushButton#RefreshButton:pressed {
-            background-color: #21618c;
-        }
-
-        QWidget#ContentWidget, QWidget#DetailWidget {
-            background-color: white;
-            border: 1px solid #ddd;
-        }
-
-        QLabel#PlaceholderLabel {
-            color: #7f8c8d;
-            font-size: 16px;
-            text-align: center;
-        }
-    )");
+    // 设置分割器比例
+    m_splitter->setSizes({220, 800});
+    m_splitter->setCollapsible(0, false);
+    m_splitter->setCollapsible(1, false);
 }
 
-void CoursePage::createNavigationPanel()
+void CoursePage::setupNavigation()
 {
     m_navigationWidget = new QWidget();
-    m_navigationWidget->setObjectName("NavigationWidget");
     m_navigationWidget->setFixedWidth(220);
-
     m_navigationLayout = new QVBoxLayout(m_navigationWidget);
-    m_navigationLayout->setContentsMargins(0, 0, 0, 0);
-    m_navigationLayout->setSpacing(0);
+    m_navigationLayout->setContentsMargins(10, 10, 10, 10);
+    m_navigationLayout->setSpacing(5);
 
-    // 导航列表
-    m_navigationList = new QListWidget();
-    m_navigationList->setObjectName("NavigationList");
-    connect(m_navigationList, &QListWidget::itemClicked, this, &CoursePage::onNavigationItemClicked);
+    // 导航按钮 - 添加"我的课程"
+    m_myCoursesBtn = new QPushButton("📚 我的课程");  // 新增
+    m_navigationLayout->addWidget(m_myCoursesBtn);
+    connect(m_myCoursesBtn, &QPushButton::clicked, this, &CoursePage::showMyCourses);
 
-    // 统计信息组
-    m_statisticsGroup = new QGroupBox("📊 统计信息");
-    m_statisticsGroup->setObjectName("StatisticsGroup");
+    if (m_isTeacher) {
+        // 教师端导航
+        m_noticesBtn = new QPushButton("📢 课程通知");
+        m_assignmentsBtn = new QPushButton("📝 课程作业");
 
-    m_statisticsLabel = new QLabel();
-    m_statisticsLabel->setWordWrap(true);
-    m_statisticsLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        m_navigationLayout->addWidget(m_noticesBtn);
+        m_navigationLayout->addWidget(m_assignmentsBtn);
 
-    QVBoxLayout *statsLayout = new QVBoxLayout(m_statisticsGroup);
-    statsLayout->addWidget(m_statisticsLabel);
+        connect(m_noticesBtn, &QPushButton::clicked, this, &CoursePage::showNotices);
+        connect(m_assignmentsBtn, &QPushButton::clicked, this, &CoursePage::showAssignments);
 
-    // 刷新按钮
-    m_refreshButton = new QPushButton("🔄 刷新数据");
-    m_refreshButton->setObjectName("RefreshButton");
-    connect(m_refreshButton, &QPushButton::clicked, this, &CoursePage::refreshData);
+        // 选课管理员专用功能
+        if (m_isCourseAdmin) {
+            m_enrollmentAdminBtn = new QPushButton("🔍 选课审核");
+            m_navigationLayout->addWidget(m_enrollmentAdminBtn);
+            connect(m_enrollmentAdminBtn, &QPushButton::clicked, this, &CoursePage::showEnrollmentAdmin);
+        }
+    } else {
+        // 学生端导航
+        m_enrollmentBtn = new QPushButton("📚 我的选课");
+        m_noticesBtn = new QPushButton("📢 课程通知");
+        m_assignmentsBtn = new QPushButton("📝 课程作业");
 
-    m_navigationLayout->addWidget(m_navigationList);
-    m_navigationLayout->addWidget(m_statisticsGroup);
-    m_navigationLayout->addWidget(m_refreshButton);
+        m_navigationLayout->addWidget(m_enrollmentBtn);
+        m_navigationLayout->addWidget(m_noticesBtn);
+        m_navigationLayout->addWidget(m_assignmentsBtn);
+
+        connect(m_enrollmentBtn, &QPushButton::clicked, this, &CoursePage::showEnrollment);
+        connect(m_noticesBtn, &QPushButton::clicked, this, &CoursePage::showNotices);
+        connect(m_assignmentsBtn, &QPushButton::clicked, this, &CoursePage::showAssignments);
+    }
+
+    // 统计信息
+    m_statsGroupBox = new QGroupBox("统计信息");
+    m_statsLabel = new QLabel();
+    QVBoxLayout *statsLayout = new QVBoxLayout(m_statsGroupBox);
+    statsLayout->addWidget(m_statsLabel);
+
     m_navigationLayout->addStretch();
+    m_navigationLayout->addWidget(m_statsGroupBox);
+
+    m_splitter->addWidget(m_navigationWidget);
 }
 
-void CoursePage::createContentArea()
+void CoursePage::setupContentPages()
 {
-    // 中间内容区域
-    m_contentWidget = new QWidget();
-    m_contentWidget->setObjectName("ContentWidget");
-
-    m_contentLayout = new QVBoxLayout(m_contentWidget);
-    m_contentLayout->setContentsMargins(10, 10, 10, 10);
-
     m_contentStack = new QStackedWidget();
-    m_contentLayout->addWidget(m_contentStack);
 
-    // 右侧详情区域
-    m_detailWidget = new QWidget();
-    m_detailWidget->setObjectName("DetailWidget");
+    // 我的课程页面 - 索引0（第一个页面）
+    m_myCoursesWidget = new MyCoursesWidget(m_database, m_currentUserId, m_currentUserType, this);
+    m_contentStack->addWidget(m_myCoursesWidget);
 
-    m_detailLayout = new QVBoxLayout(m_detailWidget);
-    m_detailLayout->setContentsMargins(10, 10, 10, 10);
+    connect(m_myCoursesWidget, &MyCoursesWidget::courseUpdated,
+            this, &CoursePage::courseUpdated);
 
-    m_detailStack = new QStackedWidget();
-    m_detailLayout->addWidget(m_detailStack);
+    if (!m_isTeacher) {
+        // 学生端：选课申请页面 - 索引1
+        m_enrollmentWidget = new EnrollmentWidget(m_database, m_currentUserId, this);
+        m_contentStack->addWidget(m_enrollmentWidget);
 
-    // 创建功能页面
-    createEnrollmentPage();
-    createNoticePage();
-    createAssignmentPage();
-
-    // 默认显示选课/审核页面
-    showPlaceholderPage("请选择左侧功能");
-}
-
-void CoursePage::setupStudentUI()
-{
-    // 学生端导航项
-    QStringList navigationItems;
-    navigationItems << "📚 我的课程" << "➕ 选课申请" << "📋 课程详情";
-
-    for (int i = 0; i < navigationItems.size(); ++i) {
-        QListWidgetItem *item = new QListWidgetItem(navigationItems[i]);
-        item->setData(Qt::UserRole, i);
-        m_navigationList->addItem(item);
+        connect(m_enrollmentWidget, &EnrollmentWidget::enrollmentSubmitted,
+                this, &CoursePage::enrollmentSubmitted);
     }
 
-    // 默认选中第一项
-    m_navigationList->setCurrentRow(0);
-}
+    // 课程通知页面
+    m_courseNoticeWidget = new CourseNoticeWidget(m_database, m_currentUserId, m_currentUserType, this);
+    m_contentStack->addWidget(m_courseNoticeWidget);
 
-void CoursePage::setupTeacherUI()
-{
-    // 教师端导航项
-    QStringList navigationItems;
-
-    if (m_userType == TEACHER) {
-        // 检查是否为选课管理员
-        if (m_database) {
-            bool isCourseAdmin = m_database->isTeacherCourseAdmin(m_userId);
-
-            if (isCourseAdmin) {
-                navigationItems << "📚 我的课程" << "✅ 选课审核" << "📋 课程管理";
-            } else {
-                navigationItems << "📚 我的课程" << "📋 课程管理";
-            }
-        } else {
-            navigationItems << "📚 我的课程" << "📋 课程管理";
-        }
-    }
-
-    for (int i = 0; i < navigationItems.size(); ++i) {
-        QListWidgetItem *item = new QListWidgetItem(navigationItems[i]);
-        item->setData(Qt::UserRole, i);
-        m_navigationList->addItem(item);
-    }
-
-    // 默认选中第一项
-    m_navigationList->setCurrentRow(0);
-}
-
-void CoursePage::refreshData()
-{
-    if (!m_database) {
-        qDebug() << "数据库未连接";
-        return;
-    }
-
-    // 加载课程列表
-    loadCourseList();
-
-    // 更新统计信息
-    updateStatistics();
-
-    qDebug() << "课程页面数据刷新完成";
-}
-
-void CoursePage::loadCourseList()
-{
-    m_courseList.clear();
-
-    if (!m_database) {
-        return;
-    }
-
-    if (m_userType == STUDENT) {
-        // 加载学生的课程
-        m_courseList = m_database->getCoursesByStudent(m_userId, true); // 包含申请中的课程
-    } else {
-        // 加载教师的课程
-        m_courseList = m_database->getCoursesByTeacher(m_userId);
-    }
-
-    qDebug() << "加载了" << m_courseList.size() << "门课程";
-}
-
-void CoursePage::updateStatistics()
-{
-    if (!m_database) {
-        return;
-    }
-
-    QString statsText;
-
-    if (m_userType == STUDENT) {
-        m_totalCourses = 0;
-        m_pendingRequests = 0;
-
-        for (const auto &course : m_courseList) {
-            if (course["enrollment_status"].toString() == "已通过") {
-                m_totalCourses++;
-            } else if (course["enrollment_status"].toString() == "申请中") {
-                m_pendingRequests++;
-            }
-        }
-
-        statsText = QString("已选课程: %1门\n申请中课程: %2门\n待完成作业: %3个")
-                        .arg(m_totalCourses)
-                        .arg(m_pendingRequests)
-                        .arg(m_pendingAssignments);
-    } else {
-        m_totalCourses = m_courseList.size();
-
-        // 获取选课申请统计
-        QVariantMap enrollmentStats = m_database->getEnrollmentStats();
-        m_pendingRequests = enrollmentStats["pending_count"].toInt();
-
-        statsText = QString("教授课程: %1门\n待处理申请: %2条\n发布通知: %3条")
-                        .arg(m_totalCourses)
-                        .arg(m_pendingRequests)
-                        .arg(m_unreadNotices);
-    }
-
-    m_statisticsLabel->setText(statsText);
-}
-
-void CoursePage::showPlaceholderPage(const QString &message)
-{
-    // 清空当前内容
-    while (m_contentStack->count() > 0) {
-        QWidget *widget = m_contentStack->widget(0);
-        m_contentStack->removeWidget(widget);
-        widget->deleteLater();
-    }
-
-    while (m_detailStack->count() > 0) {
-        QWidget *widget = m_detailStack->widget(0);
-        m_detailStack->removeWidget(widget);
-        widget->deleteLater();
-    }
-
-    // 创建占位页面
-    QWidget *placeholderWidget = new QWidget();
-    QVBoxLayout *layout = new QVBoxLayout(placeholderWidget);
-
-    QLabel *placeholderLabel = new QLabel(message);
-    placeholderLabel->setObjectName("PlaceholderLabel");
-    placeholderLabel->setAlignment(Qt::AlignCenter);
-
-    layout->addStretch();
-    layout->addWidget(placeholderLabel);
-    layout->addStretch();
-
-    m_contentStack->addWidget(placeholderWidget);
-
-    // 右侧也显示占位内容
-    QWidget *detailPlaceholder = new QWidget();
-    QVBoxLayout *detailLayout = new QVBoxLayout(detailPlaceholder);
-
-    QLabel *detailLabel = new QLabel("选择课程查看详情");
-    detailLabel->setObjectName("PlaceholderLabel");
-    detailLabel->setAlignment(Qt::AlignCenter);
-
-    detailLayout->addStretch();
-    detailLayout->addWidget(detailLabel);
-    detailLayout->addStretch();
-
-    m_detailStack->addWidget(detailPlaceholder);
-}
-
-void CoursePage::autoRefresh()
-{
-    // 静默刷新，不影响用户当前操作
-    if (m_database) {
-        updateStatistics();
-    }
-}
-
-void CoursePage::onCourseListItemClicked()
-{
-    // 课程列表项点击处理（将在后续步骤中实现）
-    qDebug() << "课程列表项被点击";
-}
-
-void CoursePage::onNavigationItemClicked()
-{
-    QListWidgetItem *item = m_navigationList->currentItem();
-    if (!item) {
-        return;
-    }
-
-    int pageIndex = item->data(Qt::UserRole).toInt();
-    onPageChanged(pageIndex);
-}
-
-void CoursePage::onCourseSelected(int courseId)
-{
-    m_currentCourseId = courseId;
-    qDebug() << "选中课程ID:" << courseId;
-
-    // 后续步骤中实现课程详情显示
-}
-
-void CoursePage::onPageChanged(int pageIndex)
-{
-    m_currentPage = static_cast<PageType>(pageIndex);
-
-    QString pageName;
-    QWidget *targetWidget = nullptr;
-
-    switch (m_currentPage) {
-    case PAGE_MY_COURSES:
-        pageName = "我的课程";
-        // 显示课程列表（可以是现有的占位页面）
-        showPlaceholderPage("我的课程功能开发中...");
-        break;
-
-    case PAGE_ENROLLMENT:
-        pageName = (m_userType == STUDENT) ? "选课申请" : "选课审核";
-        targetWidget = m_enrollmentWidget;
-        break;
-
-    case PAGE_COURSE_DETAIL:
-        // 根据当前选择显示通知或作业
-        if (m_currentSubPage == SUBPAGE_NOTICE) {
-            pageName = "课程通知";
-            targetWidget = m_noticeWidget;
-        } else {
-            pageName = "课程作业";
-            targetWidget = m_assignmentWidget;
-        }
-        break;
-    }
-
-    if (targetWidget) {
-        m_contentStack->setCurrentWidget(targetWidget);
-
-        // 刷新对应组件的数据
-        if (targetWidget == m_enrollmentWidget) {
-            m_enrollmentWidget->refreshData();
-        } else if (targetWidget == m_noticeWidget) {
-            m_noticeWidget->refreshData();
-        } else if (targetWidget == m_assignmentWidget) {
-            m_assignmentWidget->refreshData();
-        }
-    }
-
-    qDebug() << "切换到页面:" << pageName;
-}
-
-void CoursePage::createEnrollmentPage()
-{
-    if (m_userType == STUDENT) {
-        m_enrollmentWidget = new EnrollmentWidget(m_database, m_userId, EnrollmentWidget::STUDENT, this);
-    } else {
-        m_enrollmentWidget = new EnrollmentWidget(m_database, m_userId, EnrollmentWidget::TEACHER, this);
-    }
-
-    // 连接信号
-    connect(m_enrollmentWidget, &EnrollmentWidget::enrollmentSubmitted,
-            this, &CoursePage::courseEnrolled);
-    connect(m_enrollmentWidget, &EnrollmentWidget::requestProcessed,
-            this, &CoursePage::enrollmentProcessed);
-
-    m_contentStack->addWidget(m_enrollmentWidget);
-}
-
-void CoursePage::createNoticePage()
-{
-    if (m_userType == STUDENT) {
-        m_noticeWidget = new NoticeWidget(m_database, m_userId, NoticeWidget::STUDENT, -1, this);
-    } else {
-        m_noticeWidget = new NoticeWidget(m_database, m_userId, NoticeWidget::TEACHER, -1, this);
-    }
-
-    // 连接信号
-    connect(m_noticeWidget, &NoticeWidget::noticePublished,
+    connect(m_courseNoticeWidget, &CourseNoticeWidget::noticePublished,
             this, &CoursePage::noticePublished);
-    connect(m_noticeWidget, &NoticeWidget::noticeUpdated,
-            this, [this](int noticeId, const QString &title) {
-                Q_UNUSED(noticeId)
-                emit noticePublished(-1, title); // 重用信号
-            });
 
-    m_contentStack->addWidget(m_noticeWidget);
-}
+    // 课程作业页面
+    m_courseAssignmentWidget = new CourseAssignmentWidget(m_database, m_currentUserId, m_currentUserType, this);
+    m_contentStack->addWidget(m_courseAssignmentWidget);
 
-void CoursePage::createAssignmentPage()
-{
-    if (m_userType == STUDENT) {
-        m_assignmentWidget = new AssignmentWidget(m_database, m_userId, AssignmentWidget::STUDENT, -1, this);
-    } else {
-        m_assignmentWidget = new AssignmentWidget(m_database, m_userId, AssignmentWidget::TEACHER, -1, this);
+    connect(m_courseAssignmentWidget, &CourseAssignmentWidget::assignmentPublished,
+            this, &CoursePage::assignmentPublished);
+
+    // 选课审核页面（仅选课管理员）
+    if (m_isCourseAdmin) {
+        m_enrollmentAdminWidget = new EnrollmentAdminWidget(m_database, m_currentUserId, this);
+        m_contentStack->addWidget(m_enrollmentAdminWidget);
     }
 
-    // 连接信号
-    connect(m_assignmentWidget, &AssignmentWidget::assignmentPublished,
-            this, &CoursePage::assignmentPublished);
-    connect(m_assignmentWidget, &AssignmentWidget::assignmentSubmitted,
-            this, [this](int assignmentId, int studentId) {
-                Q_UNUSED(assignmentId)
-                Q_UNUSED(studentId)
-                // 可以添加作业提交通知
-            });
-
-    m_contentStack->addWidget(m_assignmentWidget);
+    m_splitter->addWidget(m_contentStack);
 }
 
-// 页面切换方法
-void CoursePage::switchToSubPage(SubPageType subPage)
+void CoursePage::setupStyles()
 {
-    m_currentSubPage = subPage;
+    // 设置导航区域样式
+    m_navigationWidget->setStyleSheet(
+        "QWidget {"
+        "    background-color: #f5f5f5;"
+        "    border-right: 1px solid #ddd;"
+        "}"
+        "QPushButton {"
+        "    text-align: left;"
+        "    padding: 12px 16px;"
+        "    border: none;"
+        "    background-color: transparent;"
+        "    font-size: 14px;"
+        "    font-weight: 500;"
+        "    border-radius: 6px;"
+        "    margin: 2px 0px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #e8f4ff;"
+        "    color: #1890ff;"
+        "}"
+        "QPushButton:checked {"
+        "    background-color: #1890ff;"
+        "    color: white;"
+        "}"
+        "QGroupBox {"
+        "    font-weight: bold;"
+        "    border: 1px solid #ddd;"
+        "    border-radius: 6px;"
+        "    margin-top: 6px;"
+        "    padding-top: 10px;"
+        "}"
+        "QGroupBox::title {"
+        "    subcontrol-origin: margin;"
+        "    left: 10px;"
+        "    padding: 0 5px 0 5px;"
+        "}"
+        );
 
-    if (m_currentPage == PAGE_COURSE_DETAIL) {
-        onPageChanged(PAGE_COURSE_DETAIL);
+    // 设置内容区域样式
+    m_contentStack->setStyleSheet(
+        "QStackedWidget {"
+        "    background-color: white;"
+        "    border: none;"
+        "}"
+        );
+
+    // 设置分割器样式
+    m_splitter->setStyleSheet(
+        "QSplitter::handle {"
+        "    background-color: #ddd;"
+        "    width: 1px;"
+        "}"
+        "QSplitter::handle:hover {"
+        "    background-color: #1890ff;"
+        "}"
+        );
+}
+
+void CoursePage::checkUserPermissions()
+{
+    if (m_isTeacher && m_database) {
+        m_isCourseAdmin = m_database->isTeacherCourseAdmin(m_currentUserId);
+        qDebug() << "用户权限检查 - 教师ID:" << m_currentUserId << "是否为选课管理员:" << m_isCourseAdmin;
+    }
+}
+
+void CoursePage::refreshAll()
+{
+    updateStatistics();
+    updateNavigationBadges();
+
+    // 刷新当前显示的页面
+    if (m_myCoursesWidget && m_myCoursesWidget->isVisible()) {
+        m_myCoursesWidget->refreshData();
+    }
+    if (m_enrollmentWidget && m_enrollmentWidget->isVisible()) {
+        m_enrollmentWidget->refreshData();
+    }
+    if (m_enrollmentAdminWidget && m_enrollmentAdminWidget->isVisible()) {
+        m_enrollmentAdminWidget->refreshData();
+    }
+    if (m_courseNoticeWidget && m_courseNoticeWidget->isVisible()) {
+        m_courseNoticeWidget->refreshData();
+    }
+    if (m_courseAssignmentWidget && m_courseAssignmentWidget->isVisible()) {
+        m_courseAssignmentWidget->refreshData();
+    }
+}
+
+void CoursePage::showEnrollment()
+{
+    if (m_enrollmentWidget) {
+        m_contentStack->setCurrentWidget(m_enrollmentWidget);
+        m_enrollmentWidget->refreshData();
+
+        // 更新按钮状态
+        m_myCoursesBtn->setChecked(false);
+        m_enrollmentBtn->setChecked(true);
+        m_noticesBtn->setChecked(false);
+        m_assignmentsBtn->setChecked(false);
     }
 }
 
 void CoursePage::showNotices()
 {
-    switchToSubPage(SUBPAGE_NOTICE);
-    onPageChanged(PAGE_COURSE_DETAIL);
+    if (m_courseNoticeWidget) {
+        m_contentStack->setCurrentWidget(m_courseNoticeWidget);
+        m_courseNoticeWidget->refreshData();
+
+        // 更新按钮状态
+        m_myCoursesBtn->setChecked(false);
+        if (m_enrollmentBtn) m_enrollmentBtn->setChecked(false);
+        m_noticesBtn->setChecked(true);
+        m_assignmentsBtn->setChecked(false);
+        if (m_enrollmentAdminBtn) m_enrollmentAdminBtn->setChecked(false);
+    }
 }
 
 void CoursePage::showAssignments()
 {
-    switchToSubPage(SUBPAGE_ASSIGNMENT);
-    onPageChanged(PAGE_COURSE_DETAIL);
+    if (m_courseAssignmentWidget) {
+        m_contentStack->setCurrentWidget(m_courseAssignmentWidget);
+        m_courseAssignmentWidget->refreshData();
+
+        // 更新按钮状态
+        m_myCoursesBtn->setChecked(false);
+        if (m_enrollmentBtn) m_enrollmentBtn->setChecked(false);
+        m_noticesBtn->setChecked(false);
+        m_assignmentsBtn->setChecked(true);
+        if (m_enrollmentAdminBtn) m_enrollmentAdminBtn->setChecked(false);
+    }
 }
 
-void CoursePage::showEnrollment()
+void CoursePage::showEnrollmentAdmin()
 {
-    onPageChanged(PAGE_ENROLLMENT);
+    if (m_enrollmentAdminWidget) {
+        m_contentStack->setCurrentWidget(m_enrollmentAdminWidget);
+        m_enrollmentAdminWidget->refreshData();
+
+        // 更新按钮状态
+        m_myCoursesBtn->setChecked(false);
+        m_noticesBtn->setChecked(false);
+        m_assignmentsBtn->setChecked(false);
+        m_enrollmentAdminBtn->setChecked(true);
+    }
+}
+
+void CoursePage::onNavigationClicked()
+{
+    QPushButton *button = qobject_cast<QPushButton*>(sender());
+    if (!button) return;
+
+    // 重置所有按钮状态
+    m_myCoursesBtn->setChecked(false);
+    if (m_enrollmentBtn) m_enrollmentBtn->setChecked(false);
+    m_noticesBtn->setChecked(false);
+    m_assignmentsBtn->setChecked(false);
+    if (m_enrollmentAdminBtn) m_enrollmentAdminBtn->setChecked(false);
+
+    // 设置当前按钮为选中状态
+    button->setChecked(true);
+}
+
+void CoursePage::autoRefresh()
+{
+    updateStatistics();
+    updateNavigationBadges();
+}
+
+void CoursePage::updateStatistics()
+{
+    if (!m_database) return;
+
+    QString statsText;
+
+    if (m_isTeacher) {
+        // 教师端统计
+        if (m_isCourseAdmin) {
+            // 选课管理员统计
+            QList<QVariantMap> pendingEnrollments = m_database->getPendingEnrollments();
+            m_pendingEnrollmentCount = pendingEnrollments.size();
+
+            statsText = QString("待审核申请: %1条").arg(m_pendingEnrollmentCount);
+        } else {
+            // 普通教师统计
+            QList<Course> courses = m_database->getTeacherCourses(m_currentUserId);
+            statsText = QString("授课课程: %1门").arg(courses.size());
+        }
+    } else {
+        // 学生端统计
+        QList<QVariantMap> studentCourses = m_database->getStudentCourses(m_currentUserId);
+        m_enrolledCourseCount = 0;
+        int pendingCount = 0;
+
+        for (const auto &course : studentCourses) {
+            QString status = course["enrollment_status"].toString();
+            if (status == "已通过") {
+                m_enrolledCourseCount++;
+            } else if (status == "申请中") {
+                pendingCount++;
+            }
+        }
+
+        statsText = QString("已选课程: %1门\n申请中: %2门")
+                        .arg(m_enrolledCourseCount)
+                        .arg(pendingCount);
+    }
+
+    m_statsLabel->setText(statsText);
+}
+
+void CoursePage::updateNavigationBadges()
+{
+    // 这里可以添加未读消息数量等徽章显示
+    // 暂时简化实现
+}
+
+void CoursePage::showMyCourses()
+{
+    if (m_myCoursesWidget) {
+        m_contentStack->setCurrentWidget(m_myCoursesWidget);
+        m_myCoursesWidget->refreshData();
+
+        // 更新按钮状态
+        m_myCoursesBtn->setChecked(true);
+        if (m_enrollmentBtn) m_enrollmentBtn->setChecked(false);
+        m_noticesBtn->setChecked(false);
+        m_assignmentsBtn->setChecked(false);
+        if (m_enrollmentAdminBtn) m_enrollmentAdminBtn->setChecked(false);
+    }
 }

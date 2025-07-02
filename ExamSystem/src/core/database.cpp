@@ -22,21 +22,21 @@ bool Database::connectToDatabase()
 
     bool connected = false;
     for (const QString &driverName : driverNames) {
-        // 连接本地
-        QString connectionString = QString("DRIVER={%1};"
-                                           "SERVER=localhost;"
-                                           "DATABASE=exam_system;"
-                                           "UID=root;"
-                                           "PWD=Zy202312138;"//    ====================记住改密码！！！！
-                                           "PORT=3306;").arg(driverName);
-        // 连接服务器
+        // // 连接本地
         // QString connectionString = QString("DRIVER={%1};"
-        //                                    "SERVER=43.137.46.253;" //云服务器IP
+        //                                    "SERVER=localhost;"
         //                                    "DATABASE=exam_system;"
-        //                                    "UID=xiaoyou_user;"
-        //                                    "PWD=Zy202312138;"
-        //                                    "PORT=3306;"
-        //                                    "OPTION=3;").arg(driverName);
+        //                                    "UID=root;"
+        //                                    "PWD=Zy202312138;"//    ====================记住改密码！！！！
+        //                                    "PORT=3306;").arg(driverName);
+        //连接服务器
+        QString connectionString = QString("DRIVER={%1};"
+                                           "SERVER=43.137.46.253;" //云服务器IP
+                                           "DATABASE=exam_system;"
+                                           "UID=xiaoyou_user;"
+                                           "PWD=Zy202312138;"
+                                           "PORT=3306;"
+                                           "OPTION=3;").arg(driverName);
 
         db.setDatabaseName(connectionString);
 
@@ -1096,29 +1096,6 @@ bool Database::canModifyExam(int examId, int teacherId)
     return false;
 }
 
-// 获取教师课程
-QList<Course> Database::getTeacherCourses(int teacherId)
-{
-    QList<Course> courses;
-    QSqlQuery query;
-
-    query.prepare("SELECT c.*, t.name as teacher_name "
-                  "FROM courses c "
-                  "INNER JOIN teachers t ON c.teacher_id = t.teacher_id "
-                  "WHERE c.teacher_id = ? "
-                  "ORDER BY c.course_name");
-    query.addBindValue(teacherId);
-
-    if (query.exec()) {
-        while (query.next()) {
-            courses.append(createCourseFromQuery(query));
-        }
-    } else {
-        qDebug() << "获取教师课程失败:" << query.lastError().text();
-    }
-
-    return courses;
-}
 
 QList<Course> Database::getAllCourses()
 {
@@ -3770,1299 +3747,872 @@ bool Database::leaveGroup(int groupId, int userId, const QString &userType)
     return false;
 }
 
+
+
+
+
 // ============================================================================
-// 选课管理相关方法实现
+// 课程管理功能实现（阶段6新增）
 // ============================================================================
 
-QList<QVariantMap> Database::getEnrollmentRequests(int adminId)
+// 选课管理相关方法
+bool Database::applyForCourse(int studentId, int courseId)
 {
-    QList<QVariantMap> requests;
+    // 检查是否已经选课或申请过
+    QSqlQuery checkQuery;
+    checkQuery.prepare("SELECT enrollment_status FROM student_courses WHERE student_id = ? AND course_id = ?");
+    checkQuery.addBindValue(studentId);
+    checkQuery.addBindValue(courseId);
 
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return requests;
-    }
-
-    QSqlQuery query(db);
-
-    // 只有选课管理员才能查看申请，如果adminId为0表示查看所有
-    if (adminId > 0) {
-        // 检查是否为选课管理员
-        query.prepare("SELECT is_course_admin FROM teachers WHERE teacher_id = ?");
-        query.addBindValue(adminId);
-
-        if (!query.exec() || !query.next() || !query.value(0).toBool()) {
-            qDebug() << "用户不是选课管理员，无权查看申请";
-            return requests;
-        }
-    }
-
-    // 获取申请中的选课记录
-    query.prepare(R"(
-        SELECT
-            sc.student_id,
-            sc.course_id,
-            sc.enrollment_time,
-            s.name as student_name,
-            s.grade as student_grade,
-            s.college as student_college,
-            c.course_name,
-            c.college as course_college,
-            t.name as teacher_name
-        FROM student_courses sc
-        JOIN students s ON sc.student_id = s.student_id
-        JOIN courses c ON sc.course_id = c.course_id
-        JOIN teachers t ON c.teacher_id = t.teacher_id
-        WHERE sc.enrollment_status = '申请中'
-        ORDER BY sc.enrollment_time DESC
-    )");
-
-    if (!query.exec()) {
-        qDebug() << "获取选课申请失败：" << query.lastError().text();
-        return requests;
-    }
-
-    while (query.next()) {
-        QVariantMap request;
-        request["student_id"] = query.value("student_id").toInt();
-        request["course_id"] = query.value("course_id").toInt();
-        request["enrollment_time"] = query.value("enrollment_time").toDateTime();
-        request["student_name"] = query.value("student_name").toString();
-        request["student_grade"] = query.value("student_grade").toString();
-        request["student_college"] = query.value("student_college").toString();
-        request["course_name"] = query.value("course_name").toString();
-        request["course_college"] = query.value("course_college").toString();
-        request["teacher_name"] = query.value("teacher_name").toString();
-
-        requests.append(request);
-    }
-
-    qDebug() << "获取到" << requests.size() << "条选课申请";
-    return requests;
-}
-
-bool Database::processEnrollmentRequest(int studentId, int courseId, bool approved, int adminId)
-{
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return false;
-    }
-
-    // 检查是否为选课管理员
-    QSqlQuery query(db);
-    query.prepare("SELECT is_course_admin FROM teachers WHERE teacher_id = ?");
-    query.addBindValue(adminId);
-
-    if (!query.exec() || !query.next() || !query.value(0).toBool()) {
-        qDebug() << "用户不是选课管理员，无权处理申请";
-        return false;
-    }
-
-    // 开始事务
-    db.transaction();
-
-    if (approved) {
-        // 同意申请：更新状态为已通过
-        query.prepare(R"(
-            UPDATE student_courses
-            SET enrollment_status = '已通过'
-            WHERE student_id = ? AND course_id = ? AND enrollment_status = '申请中'
-        )");
-        query.addBindValue(studentId);
-        query.addBindValue(courseId);
-
-        if (!query.exec()) {
-            qDebug() << "更新选课状态失败：" << query.lastError().text();
-            db.rollback();
-            return false;
-        }
-
-        if (query.numRowsAffected() == 0) {
-            qDebug() << "没有找到对应的申请记录";
-            db.rollback();
-            return false;
-        }
-
-        qDebug() << "选课申请已通过：学生" << studentId << "课程" << courseId;
-    } else {
-        // 拒绝申请：直接删除记录
-        query.prepare(R"(
-            DELETE FROM student_courses
-            WHERE student_id = ? AND course_id = ? AND enrollment_status = '申请中'
-        )");
-        query.addBindValue(studentId);
-        query.addBindValue(courseId);
-
-        if (!query.exec()) {
-            qDebug() << "删除选课申请失败：" << query.lastError().text();
-            db.rollback();
-            return false;
-        }
-
-        if (query.numRowsAffected() == 0) {
-            qDebug() << "没有找到对应的申请记录";
-            db.rollback();
-            return false;
-        }
-
-        qDebug() << "选课申请已拒绝：学生" << studentId << "课程" << courseId;
-    }
-
-    // 提交事务
-    if (!db.commit()) {
-        qDebug() << "事务提交失败：" << db.lastError().text();
-        return false;
-    }
-
-    return true;
-}
-
-bool Database::submitEnrollmentRequest(int studentId, int courseId)
-{
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return false;
-    }
-
-    QSqlQuery query(db);
-
-    // 检查课程是否存在且开放选课
-    query.prepare("SELECT status, max_students FROM courses WHERE course_id = ?");
-    query.addBindValue(courseId);
-
-    if (!query.exec() || !query.next()) {
-        qDebug() << "课程不存在";
-        return false;
-    }
-
-    QString courseStatus = query.value("status").toString();
-    int maxStudents = query.value("max_students").toInt();
-
-    if (courseStatus != "开放选课") {
-        qDebug() << "课程未开放选课";
-        return false;
-    }
-
-    // 检查是否已达到最大选课人数
-    query.prepare(R"(
-        SELECT COUNT(*) FROM student_courses
-        WHERE course_id = ? AND enrollment_status = '已通过'
-    )");
-    query.addBindValue(courseId);
-
-    if (!query.exec() || !query.next()) {
-        qDebug() << "检查课程人数失败";
-        return false;
-    }
-
-    int currentStudents = query.value(0).toInt();
-    if (currentStudents >= maxStudents) {
-        qDebug() << "课程已满员";
-        return false;
-    }
-
-    // 检查是否已有选课记录
-    query.prepare("SELECT enrollment_status FROM student_courses WHERE student_id = ? AND course_id = ?");
-    query.addBindValue(studentId);
-    query.addBindValue(courseId);
-
-    if (query.exec() && query.next()) {
-        QString status = query.value("enrollment_status").toString();
+    if (checkQuery.exec() && checkQuery.next()) {
+        QString status = checkQuery.value("enrollment_status").toString();
         if (status == "已通过") {
-            qDebug() << "学生已选择该课程";
+            qDebug() << "学生已经选课成功，无需重复申请";
             return false;
         } else if (status == "申请中") {
-            qDebug() << "学生已申请该课程";
+            qDebug() << "选课申请正在处理中";
             return false;
         }
     }
 
-    // 插入选课申请
-    query.prepare(R"(
-        INSERT INTO student_courses (student_id, course_id, enrollment_status, enrollment_time)
-        VALUES (?, ?, '申请中', NOW())
-    )");
+    // 提交选课申请
+    QSqlQuery query;
+    query.prepare("INSERT INTO student_courses (student_id, course_id, enrollment_status, enrollment_time) "
+                  "VALUES (?, ?, '申请中', NOW())");
     query.addBindValue(studentId);
     query.addBindValue(courseId);
 
-    if (!query.exec()) {
-        qDebug() << "提交选课申请失败：" << query.lastError().text();
-        return false;
-    }
-
-    qDebug() << "选课申请提交成功：学生" << studentId << "课程" << courseId;
-    return true;
-}
-
-QList<QVariantMap> Database::getCoursesByStudent(int studentId, bool includeApplying)
-{
-    QList<QVariantMap> courses;
-
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return courses;
-    }
-
-    QSqlQuery query(db);
-    QString whereClause = includeApplying ?
-                              "WHERE sc.student_id = ?" :
-                              "WHERE sc.student_id = ? AND sc.enrollment_status = '已通过'";
-
-    query.prepare(QString(R"(
-        SELECT
-            c.course_id,
-            c.course_name,
-            c.college,
-            c.description,
-            c.credits,
-            c.course_hours,
-            c.semester,
-            c.status,
-            t.name as teacher_name,
-            sc.enrollment_status,
-            sc.enrollment_time,
-            sc.exam_score
-        FROM student_courses sc
-        JOIN courses c ON sc.course_id = c.course_id
-        JOIN teachers t ON c.teacher_id = t.teacher_id
-        %1
-        ORDER BY sc.enrollment_time DESC
-    )").arg(whereClause));
-
-    query.addBindValue(studentId);
-
-    if (!query.exec()) {
-        qDebug() << "获取学生课程失败：" << query.lastError().text();
-        return courses;
-    }
-
-    while (query.next()) {
-        QVariantMap course;
-        course["course_id"] = query.value("course_id").toInt();
-        course["course_name"] = query.value("course_name").toString();
-        course["college"] = query.value("college").toString();
-        course["description"] = query.value("description").toString();
-        course["credits"] = query.value("credits").toInt();
-        course["course_hours"] = query.value("course_hours").toInt();
-        course["semester"] = query.value("semester").toString();
-        course["status"] = query.value("status").toString();
-        course["teacher_name"] = query.value("teacher_name").toString();
-        course["enrollment_status"] = query.value("enrollment_status").toString();
-        course["enrollment_time"] = query.value("enrollment_time").toDateTime();
-        course["exam_score"] = query.value("exam_score").toDouble();
-
-        courses.append(course);
-    }
-
-    qDebug() << "获取到学生" << studentId << "的" << courses.size() << "门课程";
-    return courses;
-}
-
-QList<QVariantMap> Database::getCoursesByTeacher(int teacherId)
-{
-    QList<QVariantMap> courses;
-
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return courses;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT
-            c.course_id,
-            c.course_name,
-            c.college,
-            c.description,
-            c.credits,
-            c.course_hours,
-            c.semester,
-            c.max_students,
-            c.status,
-            COUNT(CASE WHEN sc.enrollment_status = '已通过' THEN 1 END) as enrolled_count,
-            COUNT(CASE WHEN sc.enrollment_status = '申请中' THEN 1 END) as pending_count
-        FROM courses c
-        LEFT JOIN student_courses sc ON c.course_id = sc.course_id
-        WHERE c.teacher_id = ?
-        GROUP BY c.course_id
-        ORDER BY c.course_id DESC
-    )");
-
-    query.addBindValue(teacherId);
-
-    if (!query.exec()) {
-        qDebug() << "获取教师课程失败：" << query.lastError().text();
-        return courses;
-    }
-
-    while (query.next()) {
-        QVariantMap course;
-        course["course_id"] = query.value("course_id").toInt();
-        course["course_name"] = query.value("course_name").toString();
-        course["college"] = query.value("college").toString();
-        course["description"] = query.value("description").toString();
-        course["credits"] = query.value("credits").toInt();
-        course["course_hours"] = query.value("course_hours").toInt();
-        course["semester"] = query.value("semester").toString();
-        course["max_students"] = query.value("max_students").toInt();
-        course["status"] = query.value("status").toString();
-        course["enrolled_count"] = query.value("enrolled_count").toInt();
-        course["pending_count"] = query.value("pending_count").toInt();
-
-        courses.append(course);
-    }
-
-    qDebug() << "获取到教师" << teacherId << "的" << courses.size() << "门课程";
-    return courses;
-}
-
-QList<QVariantMap> Database::getAvailableCourses(int studentId)
-{
-    QList<QVariantMap> courses;
-
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return courses;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT
-            c.course_id,
-            c.course_name,
-            c.college,
-            c.description,
-            c.credits,
-            c.course_hours,
-            c.semester,
-            c.max_students,
-            t.name as teacher_name,
-            COUNT(CASE WHEN sc.enrollment_status = '已通过' THEN 1 END) as enrolled_count
-        FROM courses c
-        JOIN teachers t ON c.teacher_id = t.teacher_id
-        LEFT JOIN student_courses sc ON c.course_id = sc.course_id
-        WHERE c.status = '开放选课'
-        AND c.course_id NOT IN (
-            SELECT course_id FROM student_courses
-            WHERE student_id = ?
-        )
-        GROUP BY c.course_id
-        HAVING enrolled_count < c.max_students
-        ORDER BY c.course_name
-    )");
-
-    query.addBindValue(studentId);
-
-    if (!query.exec()) {
-        qDebug() << "获取可选课程失败：" << query.lastError().text();
-        return courses;
-    }
-
-    while (query.next()) {
-        QVariantMap course;
-        course["course_id"] = query.value("course_id").toInt();
-        course["course_name"] = query.value("course_name").toString();
-        course["college"] = query.value("college").toString();
-        course["description"] = query.value("description").toString();
-        course["credits"] = query.value("credits").toInt();
-        course["course_hours"] = query.value("course_hours").toInt();
-        course["semester"] = query.value("semester").toString();
-        course["max_students"] = query.value("max_students").toInt();
-        course["teacher_name"] = query.value("teacher_name").toString();
-        course["enrolled_count"] = query.value("enrolled_count").toInt();
-
-        courses.append(course);
-    }
-
-    qDebug() << "获取到" << courses.size() << "门可选课程";
-    return courses;
-}
-
-int Database::getEnrollmentStatus(int studentId, int courseId)
-{
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return 0;
-    }
-
-    QSqlQuery query(db);
-    query.prepare("SELECT enrollment_status FROM student_courses WHERE student_id = ? AND course_id = ?");
-    query.addBindValue(studentId);
-    query.addBindValue(courseId);
-
-    if (!query.exec() || !query.next()) {
-        return 0; // 未选
-    }
-
-    QString status = query.value("enrollment_status").toString();
-    if (status == "已通过") {
-        return 1;
-    } else if (status == "申请中") {
-        return 2;
-    }
-
-    return 0;
-}
-
-QVariantMap Database::getEnrollmentStats(int courseId)
-{
-    QVariantMap stats;
-
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return stats;
-    }
-
-    QSqlQuery query(db);
-    if (courseId > 0) {
-        // 获取特定课程的统计
-        query.prepare(R"(
-            SELECT
-                COUNT(CASE WHEN enrollment_status = '申请中' THEN 1 END) as pending_count,
-                COUNT(CASE WHEN enrollment_status = '已通过' THEN 1 END) as approved_count,
-                c.max_students
-            FROM student_courses sc
-            RIGHT JOIN courses c ON sc.course_id = c.course_id
-            WHERE c.course_id = ?
-            GROUP BY c.course_id, c.max_students
-        )");
-        query.addBindValue(courseId);
+    if (query.exec()) {
+        qDebug() << "选课申请提交成功";
+        return true;
     } else {
-        // 获取总体统计
-        query.prepare(R"(
-            SELECT
-                COUNT(CASE WHEN enrollment_status = '申请中' THEN 1 END) as pending_count,
-                COUNT(CASE WHEN enrollment_status = '已通过' THEN 1 END) as approved_count
-            FROM student_courses
-        )");
+        qDebug() << "选课申请失败:" << query.lastError().text();
+        return false;
     }
-
-    if (!query.exec() || !query.next()) {
-        qDebug() << "获取选课统计失败：" << query.lastError().text();
-        return stats;
-    }
-
-    stats["pending_count"] = query.value("pending_count").toInt();
-    stats["approved_count"] = query.value("approved_count").toInt();
-    if (courseId > 0) {
-        stats["max_students"] = query.value("max_students").toInt();
-    }
-
-    return stats;
 }
 
-// ============================================================================
-// 课程通知相关方法实现
-// ============================================================================
-
-bool Database::addCourseNotice(int courseId, const QString &title, const QString &content,
-                               bool isPinned, int teacherId)
+bool Database::approveEnrollment(int studentId, int courseId)
 {
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
+    QSqlQuery query;
+    query.prepare("UPDATE student_courses SET enrollment_status = '已通过' "
+                  "WHERE student_id = ? AND course_id = ? AND enrollment_status = '申请中'");
+    query.addBindValue(studentId);
+    query.addBindValue(courseId);
+
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "选课申请审核通过";
+        return true;
+    } else {
+        qDebug() << "选课申请审核失败:" << query.lastError().text();
         return false;
     }
+}
 
-    // 检查教师是否有权限发布该课程通知
-    if (teacherId > 0 && !canManageCourseNotices(teacherId, courseId)) {
-        qDebug() << "教师无权限发布该课程通知";
+bool Database::rejectEnrollment(int studentId, int courseId)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM student_courses WHERE student_id = ? AND course_id = ? AND enrollment_status = '申请中'");
+    query.addBindValue(studentId);
+    query.addBindValue(courseId);
+
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "选课申请已拒绝";
+        return true;
+    } else {
+        qDebug() << "拒绝选课申请失败:" << query.lastError().text();
         return false;
     }
+}
 
-    QSqlQuery query(db);
-    query.prepare(R"(
-        INSERT INTO course_notices (course_id, title, content, is_pinned, publish_time)
-        VALUES (?, ?, ?, ?, NOW())
-    )");
+QList<QVariantMap> Database::getPendingEnrollments()
+{
+    QList<QVariantMap> enrollments;
+    QSqlQuery query;
 
+    query.prepare("SELECT sc.student_id, sc.course_id, sc.enrollment_time, "
+                  "s.name as student_name, s.grade, s.college as student_college, "
+                  "c.course_name, c.college as course_college, t.name as teacher_name "
+                  "FROM student_courses sc "
+                  "JOIN students s ON sc.student_id = s.student_id "
+                  "JOIN courses c ON sc.course_id = c.course_id "
+                  "JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "WHERE sc.enrollment_status = '申请中' "
+                  "ORDER BY sc.enrollment_time DESC");
+
+    if (query.exec()) {
+        while (query.next()) {
+            QVariantMap enrollment;
+            enrollment["student_id"] = query.value("student_id").toInt();
+            enrollment["course_id"] = query.value("course_id").toInt();
+            enrollment["student_name"] = query.value("student_name").toString();
+            enrollment["grade"] = query.value("grade").toString();
+            enrollment["student_college"] = query.value("student_college").toString();
+            enrollment["course_name"] = query.value("course_name").toString();
+            enrollment["course_college"] = query.value("course_college").toString();
+            enrollment["teacher_name"] = query.value("teacher_name").toString();
+            enrollment["enrollment_time"] = query.value("enrollment_time").toDateTime();
+            enrollments.append(enrollment);
+        }
+    } else {
+        qDebug() << "获取待审核选课申请失败:" << query.lastError().text();
+    }
+
+    return enrollments;
+}
+
+QList<QVariantMap> Database::getStudentCourses(int studentId)
+{
+    QList<QVariantMap> courses;
+    QSqlQuery query;
+
+    query.prepare("SELECT sc.course_id, sc.enrollment_status, sc.enrollment_time, sc.exam_score, "
+                  "c.course_name, c.college, c.description, c.credits, c.course_hours, "
+                  "c.semester, c.status, t.name as teacher_name "
+                  "FROM student_courses sc "
+                  "JOIN courses c ON sc.course_id = c.course_id "
+                  "JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "WHERE sc.student_id = ? "
+                  "ORDER BY sc.enrollment_time DESC");
+    query.addBindValue(studentId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            QVariantMap course;
+            course["course_id"]        = query.value("course_id").toInt();
+            course["course_name"]      = query.value("course_name").toString();
+            course["teacher_name"]     = query.value("teacher_name").toString();
+            course["college"]          = query.value("college").toString();
+            course["description"]      = query.value("description").toString();
+            course["credits"]          = query.value("credits").toInt();
+            course["course_hours"]     = query.value("course_hours").toInt();
+            course["semester"]         = query.value("semester").toString();
+            course["status"]           = query.value("status").toString();
+            course["enrollment_status"]= query.value("enrollment_status").toString();
+            course["enrollment_time"]  = query.value("enrollment_time").toDateTime();
+            if (!query.value("exam_score").isNull())
+                course["exam_score"]   = query.value("exam_score").toDouble();
+            courses.append(course);
+
+        }
+    } else {
+        qDebug() << "获取学生选课列表失败:" << query.lastError().text();
+    }
+
+    return courses;
+}
+
+// 课程通知管理相关方法
+int Database::publishCourseNotice(int courseId, const QString &title, const QString &content, bool isPinned)
+{
+    QSqlQuery query;
+    query.prepare("INSERT INTO course_notices (course_id, title, content, is_pinned, publish_time) "
+                  "VALUES (?, ?, ?, ?, NOW())");
     query.addBindValue(courseId);
     query.addBindValue(title);
     query.addBindValue(content);
     query.addBindValue(isPinned);
 
-    if (!query.exec()) {
-        qDebug() << "发布课程通知失败：" << query.lastError().text();
-        return false;
+    if (query.exec()) {
+        int noticeId = query.lastInsertId().toInt();
+        qDebug() << "课程通知发布成功，ID:" << noticeId;
+        return noticeId;
+    } else {
+        qDebug() << "发布课程通知失败:" << query.lastError().text();
+        return -1;
     }
-
-    qDebug() << "课程通知发布成功：" << title;
-    return true;
 }
 
-QList<QVariantMap> Database::getCourseNotices(int courseId, int studentId)
+bool Database::updateCourseNotice(int noticeId, const QString &title, const QString &content, bool isPinned)
 {
-    QList<QVariantMap> notices;
-
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return notices;
-    }
-
-    // 如果是学生查询，需要检查是否已选该课程
-    if (studentId > 0) {
-        QSqlQuery checkQuery(db);
-        checkQuery.prepare(R"(
-            SELECT 1 FROM student_courses
-            WHERE student_id = ? AND course_id = ? AND enrollment_status = '已通过'
-        )");
-        checkQuery.addBindValue(studentId);
-        checkQuery.addBindValue(courseId);
-
-        if (!checkQuery.exec() || !checkQuery.next()) {
-            qDebug() << "学生未选择该课程，无权查看通知";
-            return notices;
-        }
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT
-            notice_id,
-            title,
-            content,
-            publish_time,
-            is_pinned
-        FROM course_notices
-        WHERE course_id = ?
-        ORDER BY is_pinned DESC, publish_time DESC
-    )");
-
-    query.addBindValue(courseId);
-
-    if (!query.exec()) {
-        qDebug() << "获取课程通知失败：" << query.lastError().text();
-        return notices;
-    }
-
-    while (query.next()) {
-        QVariantMap notice;
-        notice["notice_id"] = query.value("notice_id").toInt();
-        notice["title"] = query.value("title").toString();
-        notice["content"] = query.value("content").toString();
-        notice["publish_time"] = query.value("publish_time").toDateTime();
-        notice["is_pinned"] = query.value("is_pinned").toBool();
-
-        notices.append(notice);
-    }
-
-    qDebug() << "获取到" << notices.size() << "条课程通知";
-    return notices;
-}
-
-QList<QVariantMap> Database::getStudentAllNotices(int studentId, int limit)
-{
-    QList<QVariantMap> notices;
-
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return notices;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT
-            cn.notice_id,
-            cn.title,
-            cn.content,
-            cn.publish_time,
-            cn.is_pinned,
-            c.course_name,
-            c.course_id
-        FROM course_notices cn
-        JOIN courses c ON cn.course_id = c.course_id
-        JOIN student_courses sc ON c.course_id = sc.course_id
-        WHERE sc.student_id = ? AND sc.enrollment_status = '已通过'
-        ORDER BY cn.is_pinned DESC, cn.publish_time DESC
-        LIMIT ?
-    )");
-
-    query.addBindValue(studentId);
-    query.addBindValue(limit);
-
-    if (!query.exec()) {
-        qDebug() << "获取学生所有通知失败：" << query.lastError().text();
-        return notices;
-    }
-
-    while (query.next()) {
-        QVariantMap notice;
-        notice["notice_id"] = query.value("notice_id").toInt();
-        notice["title"] = query.value("title").toString();
-        notice["content"] = query.value("content").toString();
-        notice["publish_time"] = query.value("publish_time").toDateTime();
-        notice["is_pinned"] = query.value("is_pinned").toBool();
-        notice["course_name"] = query.value("course_name").toString();
-        notice["course_id"] = query.value("course_id").toInt();
-
-        notices.append(notice);
-    }
-
-    qDebug() << "获取到学生" << studentId << "的" << notices.size() << "条通知";
-    return notices;
-}
-
-bool Database::updateCourseNotice(int noticeId, const QString &title, const QString &content,
-                                  bool isPinned, int teacherId)
-{
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return false;
-    }
-
-    // 检查权限：获取通知对应的课程ID
-    QSqlQuery checkQuery(db);
-    checkQuery.prepare("SELECT course_id FROM course_notices WHERE notice_id = ?");
-    checkQuery.addBindValue(noticeId);
-
-    if (!checkQuery.exec() || !checkQuery.next()) {
-        qDebug() << "通知不存在";
-        return false;
-    }
-
-    int courseId = checkQuery.value("course_id").toInt();
-
-    if (teacherId > 0 && !canManageCourseNotices(teacherId, courseId)) {
-        qDebug() << "教师无权限修改该课程通知";
-        return false;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        UPDATE course_notices
-        SET title = ?, content = ?, is_pinned = ?
-        WHERE notice_id = ?
-    )");
-
+    QSqlQuery query;
+    query.prepare("UPDATE course_notices SET title = ?, content = ?, is_pinned = ? WHERE notice_id = ?");
     query.addBindValue(title);
     query.addBindValue(content);
     query.addBindValue(isPinned);
     query.addBindValue(noticeId);
 
-    if (!query.exec()) {
-        qDebug() << "更新课程通知失败：" << query.lastError().text();
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "课程通知更新成功";
+        return true;
+    } else {
+        qDebug() << "更新课程通知失败:" << query.lastError().text();
         return false;
     }
-
-    if (query.numRowsAffected() == 0) {
-        qDebug() << "没有找到要更新的通知";
-        return false;
-    }
-
-    qDebug() << "课程通知更新成功：" << title;
-    return true;
 }
 
-bool Database::deleteCourseNotice(int noticeId, int teacherId)
+bool Database::deleteCourseNotice(int noticeId)
 {
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return false;
-    }
-
-    // 检查权限
-    QSqlQuery checkQuery(db);
-    checkQuery.prepare("SELECT course_id FROM course_notices WHERE notice_id = ?");
-    checkQuery.addBindValue(noticeId);
-
-    if (!checkQuery.exec() || !checkQuery.next()) {
-        qDebug() << "通知不存在";
-        return false;
-    }
-
-    int courseId = checkQuery.value("course_id").toInt();
-
-    if (teacherId > 0 && !canManageCourseNotices(teacherId, courseId)) {
-        qDebug() << "教师无权限删除该课程通知";
-        return false;
-    }
-
-    QSqlQuery query(db);
+    QSqlQuery query;
     query.prepare("DELETE FROM course_notices WHERE notice_id = ?");
     query.addBindValue(noticeId);
 
-    if (!query.exec()) {
-        qDebug() << "删除课程通知失败：" << query.lastError().text();
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "课程通知删除成功";
+        return true;
+    } else {
+        qDebug() << "删除课程通知失败:" << query.lastError().text();
         return false;
     }
-
-    if (query.numRowsAffected() == 0) {
-        qDebug() << "没有找到要删除的通知";
-        return false;
-    }
-
-    qDebug() << "课程通知删除成功";
-    return true;
 }
 
-bool Database::canManageCourseNotices(int teacherId, int courseId)
+QList<QVariantMap> Database::getCourseNotices(int courseId)
 {
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return false;
-    }
+    QList<QVariantMap> notices;
+    QSqlQuery query;
 
-    QSqlQuery query(db);
-    query.prepare("SELECT teacher_id FROM courses WHERE course_id = ?");
+    query.prepare("SELECT notice_id, title, content, publish_time, is_pinned "
+                  "FROM course_notices "
+                  "WHERE course_id = ? "
+                  "ORDER BY is_pinned DESC, publish_time DESC");
     query.addBindValue(courseId);
 
-    if (!query.exec() || !query.next()) {
-        qDebug() << "课程不存在";
-        return false;
+    if (query.exec()) {
+        while (query.next()) {
+            QVariantMap notice;
+            notice["notice_id"] = query.value("notice_id").toInt();
+            notice["title"] = query.value("title").toString();
+            notice["content"] = query.value("content").toString();
+            notice["publish_time"] = query.value("publish_time").toDateTime();
+            notice["is_pinned"] = query.value("is_pinned").toBool();
+            notices.append(notice);
+        }
+    } else {
+        qDebug() << "获取课程通知失败:" << query.lastError().text();
     }
 
-    int courseTeacherId = query.value("teacher_id").toInt();
-    return (courseTeacherId == teacherId);
+    return notices;
 }
 
-// ============================================================================
-// 作业管理相关方法实现
-// ============================================================================
-
-int Database::addAssignment(int courseId, const QString &title, const QString &description,
-                            const QDateTime &deadline, int maxScore, int teacherId)
+// 作业管理相关方法
+int Database::publishAssignment(int courseId, const QString &title, const QString &description,
+                                const QDateTime &deadline, int maxScore)
 {
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return -1;
-    }
-
-    // 检查教师是否有权限发布该课程作业
-    if (teacherId > 0 && !canManageAssignments(teacherId, courseId)) {
-        qDebug() << "教师无权限发布该课程作业";
-        return -1;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        INSERT INTO course_assignments (course_id, title, description, deadline, max_score, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-    )");
-
+    QSqlQuery query;
+    query.prepare("INSERT INTO course_assignments (course_id, title, description, deadline, max_score, "
+                  "publish_time, status) VALUES (?, ?, ?, ?, ?, NOW(), '开放提交')");
     query.addBindValue(courseId);
     query.addBindValue(title);
     query.addBindValue(description);
     query.addBindValue(deadline);
     query.addBindValue(maxScore);
 
-    // 根据截止时间设置状态
-    QString status = (deadline > QDateTime::currentDateTime()) ? "开放提交" : "已截止";
-    query.addBindValue(status);
-
-    if (!query.exec()) {
-        qDebug() << "发布作业失败：" << query.lastError().text();
+    if (query.exec()) {
+        int assignmentId = query.lastInsertId().toInt();
+        qDebug() << "作业发布成功，ID:" << assignmentId;
+        return assignmentId;
+    } else {
+        qDebug() << "发布作业失败:" << query.lastError().text();
         return -1;
     }
-
-    int assignmentId = query.lastInsertId().toInt();
-    qDebug() << "作业发布成功：" << title << "，ID：" << assignmentId;
-    return assignmentId;
 }
 
-QList<QVariantMap> Database::getAssignments(int courseId, int studentId)
+bool Database::updateAssignment(int assignmentId, const QString &title, const QString &description,
+                                const QDateTime &deadline, int maxScore)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE course_assignments SET title = ?, description = ?, deadline = ?, max_score = ? "
+                  "WHERE assignment_id = ?");
+    query.addBindValue(title);
+    query.addBindValue(description);
+    query.addBindValue(deadline);
+    query.addBindValue(maxScore);
+    query.addBindValue(assignmentId);
+
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "作业更新成功";
+        return true;
+    } else {
+        qDebug() << "更新作业失败:" << query.lastError().text();
+        return false;
+    }
+}
+
+bool Database::closeAssignment(int assignmentId)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE course_assignments SET status = '已截止' WHERE assignment_id = ?");
+    query.addBindValue(assignmentId);
+
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "作业已关闭提交";
+        return true;
+    } else {
+        qDebug() << "关闭作业失败:" << query.lastError().text();
+        return false;
+    }
+}
+
+QList<QVariantMap> Database::getCourseAssignments(int courseId)
 {
     QList<QVariantMap> assignments;
+    QSqlQuery query;
 
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return assignments;
-    }
-
-    // 如果是学生查询，需要检查是否已选该课程
-    if (studentId > 0) {
-        QSqlQuery checkQuery(db);
-        checkQuery.prepare(R"(
-            SELECT 1 FROM student_courses
-            WHERE student_id = ? AND course_id = ? AND enrollment_status = '已通过'
-        )");
-        checkQuery.addBindValue(studentId);
-        checkQuery.addBindValue(courseId);
-
-        if (!checkQuery.exec() || !checkQuery.next()) {
-            qDebug() << "学生未选择该课程，无权查看作业";
-            return assignments;
-        }
-    }
-
-    QString queryStr = R"(
-        SELECT
-            ca.assignment_id,
-            ca.title,
-            ca.description,
-            ca.publish_time,
-            ca.deadline,
-            ca.max_score,
-            ca.status
-    )";
-
-    // 如果是学生查询，获取提交状态
-    if (studentId > 0) {
-        queryStr += R"(,
-            asub.submit_time,
-            asub.score,
-            asub.feedback,
-            asub.status as submission_status
-        FROM course_assignments ca
-        LEFT JOIN assignment_submissions asub ON ca.assignment_id = asub.assignment_id
-            AND asub.student_id = ?
-        WHERE ca.course_id = ?
-        )";
-    } else {
-        queryStr += R"(
-        FROM course_assignments ca
-        WHERE ca.course_id = ?
-        )";
-    }
-
-    queryStr += " ORDER BY ca.publish_time DESC";
-
-    QSqlQuery query(db);
-    query.prepare(queryStr);
-
-    if (studentId > 0) {
-        query.addBindValue(studentId);
-    }
+    query.prepare("SELECT assignment_id, title, description, publish_time, deadline, max_score, status "
+                  "FROM course_assignments "
+                  "WHERE course_id = ? "
+                  "ORDER BY publish_time DESC");
     query.addBindValue(courseId);
 
-    if (!query.exec()) {
-        qDebug() << "获取作业列表失败：" << query.lastError().text();
-        return assignments;
-    }
-
-    while (query.next()) {
-        QVariantMap assignment;
-        assignment["assignment_id"] = query.value("assignment_id").toInt();
-        assignment["title"] = query.value("title").toString();
-        assignment["description"] = query.value("description").toString();
-        assignment["publish_time"] = query.value("publish_time").toDateTime();
-        assignment["deadline"] = query.value("deadline").toDateTime();
-        assignment["max_score"] = query.value("max_score").toInt();
-        assignment["status"] = query.value("status").toString();
-
-        if (studentId > 0) {
-            assignment["submit_time"] = query.value("submit_time").toDateTime();
-            assignment["score"] = query.value("score").toDouble();
-            assignment["feedback"] = query.value("feedback").toString();
-            assignment["submission_status"] = query.value("submission_status").toString();
+    if (query.exec()) {
+        while (query.next()) {
+            QVariantMap assignment;
+            assignment["assignment_id"] = query.value("assignment_id").toInt();
+            assignment["title"] = query.value("title").toString();
+            assignment["description"] = query.value("description").toString();
+            assignment["publish_time"] = query.value("publish_time").toDateTime();
+            assignment["deadline"] = query.value("deadline").toDateTime();
+            assignment["max_score"] = query.value("max_score").toInt();
+            assignment["status"] = query.value("status").toString();
+            assignments.append(assignment);
         }
-
-        assignments.append(assignment);
+    } else {
+        qDebug() << "获取课程作业失败:" << query.lastError().text();
     }
 
-    qDebug() << "获取到" << assignments.size() << "个作业";
     return assignments;
 }
 
-QList<QVariantMap> Database::getStudentAllAssignments(int studentId, bool includeSubmitted)
+QList<QVariantMap> Database::getStudentAssignments(int studentId)
 {
     QList<QVariantMap> assignments;
+    QSqlQuery query;
 
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return assignments;
-    }
-
-    QString whereClause = includeSubmitted ? "" : "AND asub.assignment_id IS NULL";
-
-    QSqlQuery query(db);
-    query.prepare(QString(R"(
-        SELECT
-            ca.assignment_id,
-            ca.title,
-            ca.description,
-            ca.publish_time,
-            ca.deadline,
-            ca.max_score,
-            ca.status,
-            c.course_name,
-            c.course_id,
-            asub.submit_time,
-            asub.score,
-            asub.feedback,
-            asub.status as submission_status
-        FROM course_assignments ca
-        JOIN courses c ON ca.course_id = c.course_id
-        JOIN student_courses sc ON c.course_id = sc.course_id
-        LEFT JOIN assignment_submissions asub ON ca.assignment_id = asub.assignment_id
-            AND asub.student_id = ?
-        WHERE sc.student_id = ? AND sc.enrollment_status = '已通过'
-        %1
-        ORDER BY ca.deadline ASC
-    )").arg(whereClause));
-
+    query.prepare("SELECT ca.assignment_id, ca.title, ca.description, ca.publish_time, ca.deadline, "
+                  "ca.max_score, ca.status, c.course_name, t.name as teacher_name, "
+                  "asub.content as submission_content, asub.submit_time, asub.score, "
+                  "asub.feedback, asub.grade_time, asub.status as submission_status "
+                  "FROM course_assignments ca "
+                  "JOIN courses c ON ca.course_id = c.course_id "
+                  "JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "JOIN student_courses sc ON c.course_id = sc.course_id "
+                  "LEFT JOIN assignment_submissions asub ON ca.assignment_id = asub.assignment_id AND asub.student_id = ? "
+                  "WHERE sc.student_id = ? AND sc.enrollment_status = '已通过' "
+                  "ORDER BY ca.publish_time DESC");
     query.addBindValue(studentId);
     query.addBindValue(studentId);
 
-    if (!query.exec()) {
-        qDebug() << "获取学生所有作业失败：" << query.lastError().text();
-        return assignments;
+    if (query.exec()) {
+        while (query.next()) {
+            QVariantMap assignment;
+            assignment["assignment_id"] = query.value("assignment_id").toInt();
+            assignment["title"] = query.value("title").toString();
+            assignment["description"] = query.value("description").toString();
+            assignment["course_name"] = query.value("course_name").toString();
+            assignment["teacher_name"] = query.value("teacher_name").toString();
+            assignment["publish_time"] = query.value("publish_time").toDateTime();
+            assignment["deadline"] = query.value("deadline").toDateTime();
+            assignment["max_score"] = query.value("max_score").toInt();
+            assignment["status"] = query.value("status").toString();
+
+            // 提交状态信息 - 修复这里
+            bool hasSubmitted = !query.value("submit_time").isNull();
+            assignment["has_submitted"] = hasSubmitted;
+
+            if (hasSubmitted) {
+                assignment["submission_content"] = query.value("submission_content").toString();
+                assignment["submit_time"] = query.value("submit_time").toDateTime();
+                assignment["score"] = query.value("score").isNull() ? QVariant() : query.value("score").toDouble();
+                assignment["feedback"] = query.value("feedback").toString();
+                assignment["grade_time"] = query.value("grade_time").toDateTime();
+                assignment["submission_status"] = query.value("submission_status").toString();
+            } else {
+                assignment["submission_content"] = QString();
+                assignment["submit_time"] = QDateTime();
+                assignment["score"] = QVariant();
+                assignment["feedback"] = QString();
+                assignment["grade_time"] = QDateTime();
+                assignment["submission_status"] = QString();
+            }
+
+            assignments.append(assignment);
+        }
+    } else {
+        qDebug() << "获取学生作业列表失败:" << query.lastError().text();
     }
 
-    while (query.next()) {
-        QVariantMap assignment;
-        assignment["assignment_id"] = query.value("assignment_id").toInt();
-        assignment["title"] = query.value("title").toString();
-        assignment["description"] = query.value("description").toString();
-        assignment["publish_time"] = query.value("publish_time").toDateTime();
-        assignment["deadline"] = query.value("deadline").toDateTime();
-        assignment["max_score"] = query.value("max_score").toInt();
-        assignment["status"] = query.value("status").toString();
-        assignment["course_name"] = query.value("course_name").toString();
-        assignment["course_id"] = query.value("course_id").toInt();
-        assignment["submit_time"] = query.value("submit_time").toDateTime();
-        assignment["score"] = query.value("score").toDouble();
-        assignment["feedback"] = query.value("feedback").toString();
-        assignment["submission_status"] = query.value("submission_status").toString();
-
-        assignments.append(assignment);
-    }
-
-    qDebug() << "获取到学生" << studentId << "的" << assignments.size() << "个作业";
     return assignments;
 }
 
-bool Database::submitAssignment(int assignmentId, int studentId, const QString &content)
+bool Database::deleteAssignment(int assignmentId)
 {
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return false;
-    }
-
-    // 检查是否可以提交
-    if (!canSubmitAssignment(assignmentId, studentId)) {
-        qDebug() << "无法提交作业";
-        return false;
-    }
-
-    // 开始事务
-    db.transaction();
-
-    QSqlQuery query(db);
-
-    // 检查是否已有提交记录
-    query.prepare("SELECT 1 FROM assignment_submissions WHERE assignment_id = ? AND student_id = ?");
+    QSqlQuery query;
+    query.prepare("DELETE FROM course_assignments WHERE assignment_id = ?");
     query.addBindValue(assignmentId);
-    query.addBindValue(studentId);
 
-    bool hasSubmission = query.exec() && query.next();
-
-    if (hasSubmission) {
-        // 更新现有提交
-        query.prepare(R"(
-            UPDATE assignment_submissions
-            SET content = ?, submit_time = NOW(), status = '已提交'
-            WHERE assignment_id = ? AND student_id = ?
-        )");
-        query.addBindValue(content);
-        query.addBindValue(assignmentId);
-        query.addBindValue(studentId);
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "作业删除成功";
+        return true;
     } else {
-        // 插入新提交
-        query.prepare(R"(
-            INSERT INTO assignment_submissions (assignment_id, student_id, content, status)
-            VALUES (?, ?, ?, '已提交')
-        )");
-        query.addBindValue(assignmentId);
-        query.addBindValue(studentId);
-        query.addBindValue(content);
-    }
-
-    if (!query.exec()) {
-        qDebug() << "提交作业失败：" << query.lastError().text();
-        db.rollback();
+        qDebug() << "删除作业失败:" << query.lastError().text();
         return false;
     }
-
-    // 提交事务
-    if (!db.commit()) {
-        qDebug() << "事务提交失败：" << db.lastError().text();
-        return false;
-    }
-
-    qDebug() << "作业提交成功：学生" << studentId << "作业" << assignmentId;
-    return true;
 }
 
-bool Database::gradeAssignment(int assignmentId, int studentId, double score,
-                               const QString &feedback, int teacherId)
+// 作业提交管理相关方法
+bool Database::submitAssignment(int assignmentId, int studentId, const QString &content)
 {
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
+    // 检查是否已提交
+    if (hasSubmittedAssignment(assignmentId, studentId)) {
+        qDebug() << "作业已提交，无法重复提交";
         return false;
     }
 
-    // 检查教师权限
-    QSqlQuery checkQuery(db);
-    checkQuery.prepare(R"(
-        SELECT c.teacher_id FROM course_assignments ca
-        JOIN courses c ON ca.course_id = c.course_id
-        WHERE ca.assignment_id = ?
-    )");
+    // 检查是否过期
+    QSqlQuery checkQuery;
+    checkQuery.prepare("SELECT deadline, status FROM course_assignments WHERE assignment_id = ?");
     checkQuery.addBindValue(assignmentId);
 
-    if (!checkQuery.exec() || !checkQuery.next()) {
-        qDebug() << "作业不存在";
-        return false;
+    QString submissionStatus = "已提交";
+    if (checkQuery.exec() && checkQuery.next()) {
+        QDateTime deadline = checkQuery.value("deadline").toDateTime();
+        QString assignmentStatus = checkQuery.value("status").toString();
+
+        if (assignmentStatus == "已截止") {
+            qDebug() << "作业已截止，无法提交";
+            return false;
+        }
+
+        if (QDateTime::currentDateTime() > deadline) {
+            submissionStatus = "逾期提交";
+        }
     }
 
-    int courseTeacherId = checkQuery.value("teacher_id").toInt();
-    if (teacherId > 0 && courseTeacherId != teacherId) {
-        qDebug() << "教师无权限批改该作业";
+    QSqlQuery query;
+    query.prepare("INSERT INTO assignment_submissions (assignment_id, student_id, content, submit_time, status) "
+                  "VALUES (?, ?, ?, NOW(), ?)");
+    query.addBindValue(assignmentId);
+    query.addBindValue(studentId);
+    query.addBindValue(content);
+    query.addBindValue(submissionStatus);
+
+    if (query.exec()) {
+        qDebug() << "作业提交成功";
+        return true;
+    } else {
+        qDebug() << "作业提交失败:" << query.lastError().text();
         return false;
     }
+}
 
-    QSqlQuery query(db);
-    query.prepare(R"(
-        UPDATE assignment_submissions
-        SET score = ?, feedback = ?, grade_time = NOW(), status = '已批改'
-        WHERE assignment_id = ? AND student_id = ?
-    )");
-
+bool Database::gradeAssignment(int assignmentId, int studentId, double score, const QString &feedback)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE assignment_submissions SET score = ?, feedback = ?, grade_time = NOW(), "
+                  "status = '已批改' WHERE assignment_id = ? AND student_id = ?");
     query.addBindValue(score);
     query.addBindValue(feedback);
     query.addBindValue(assignmentId);
     query.addBindValue(studentId);
 
-    if (!query.exec()) {
-        qDebug() << "批改作业失败：" << query.lastError().text();
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "作业批改成功";
+        return true;
+    } else {
+        qDebug() << "作业批改失败:" << query.lastError().text();
         return false;
     }
-
-    if (query.numRowsAffected() == 0) {
-        qDebug() << "没有找到要批改的作业提交";
-        return false;
-    }
-
-    qDebug() << "作业批改成功：学生" << studentId << "作业" << assignmentId << "得分" << score;
-    return true;
 }
 
-QList<QVariantMap> Database::getSubmissions(int assignmentId, int teacherId)
+QList<QVariantMap> Database::getAssignmentSubmissions(int assignmentId)
 {
     QList<QVariantMap> submissions;
+    QSqlQuery query;
 
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return submissions;
-    }
-
-    // 检查教师权限
-    if (teacherId > 0) {
-        QSqlQuery checkQuery(db);
-        checkQuery.prepare(R"(
-            SELECT c.teacher_id FROM course_assignments ca
-            JOIN courses c ON ca.course_id = c.course_id
-            WHERE ca.assignment_id = ?
-        )");
-        checkQuery.addBindValue(assignmentId);
-
-        if (!checkQuery.exec() || !checkQuery.next()) {
-            qDebug() << "作业不存在";
-            return submissions;
-        }
-
-        int courseTeacherId = checkQuery.value("teacher_id").toInt();
-        if (courseTeacherId != teacherId) {
-            qDebug() << "教师无权限查看该作业提交";
-            return submissions;
-        }
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT
-            asub.assignment_id,
-            asub.student_id,
-            asub.content,
-            asub.submit_time,
-            asub.score,
-            asub.feedback,
-            asub.grade_time,
-            asub.status,
-            s.name as student_name,
-            s.grade as student_grade,
-            s.college as student_college
-        FROM assignment_submissions asub
-        JOIN students s ON asub.student_id = s.student_id
-        WHERE asub.assignment_id = ?
-        ORDER BY asub.submit_time DESC
-    )");
-
+    query.prepare("SELECT asub.student_id, asub.content, asub.submit_time, asub.score, "
+                  "asub.feedback, asub.grade_time, asub.status, s.name as student_name, s.grade "
+                  "FROM assignment_submissions asub "
+                  "JOIN students s ON asub.student_id = s.student_id "
+                  "WHERE asub.assignment_id = ? "
+                  "ORDER BY asub.submit_time ASC");
     query.addBindValue(assignmentId);
 
-    if (!query.exec()) {
-        qDebug() << "获取作业提交记录失败：" << query.lastError().text();
-        return submissions;
+    if (query.exec()) {
+        while (query.next()) {
+            QVariantMap submission;
+            submission["student_id"] = query.value("student_id").toInt();
+            submission["student_name"] = query.value("student_name").toString();
+            submission["grade"] = query.value("grade").toString();
+            submission["content"] = query.value("content").toString();
+            submission["submit_time"] = query.value("submit_time").toDateTime();
+            submission["score"] = query.value("score").isNull() ? QVariant() : query.value("score").toDouble();
+            submission["feedback"] = query.value("feedback").toString();
+            submission["grade_time"] = query.value("grade_time").toDateTime();
+            submission["status"] = query.value("status").toString();
+            submissions.append(submission);
+        }
+    } else {
+        qDebug() << "获取作业提交列表失败:" << query.lastError().text();
     }
 
-    while (query.next()) {
-        QVariantMap submission;
-        submission["assignment_id"] = query.value("assignment_id").toInt();
-        submission["student_id"] = query.value("student_id").toInt();
-        submission["content"] = query.value("content").toString();
-        submission["submit_time"] = query.value("submit_time").toDateTime();
-        submission["score"] = query.value("score").toDouble();
-        submission["feedback"] = query.value("feedback").toString();
-        submission["grade_time"] = query.value("grade_time").toDateTime();
-        submission["status"] = query.value("status").toString();
-        submission["student_name"] = query.value("student_name").toString();
-        submission["student_grade"] = query.value("student_grade").toString();
-        submission["student_college"] = query.value("student_college").toString();
-
-        submissions.append(submission);
-    }
-
-    qDebug() << "获取到" << submissions.size() << "条作业提交记录";
     return submissions;
 }
 
-QVariantMap Database::getSubmissionDetail(int assignmentId, int studentId)
+QVariantMap Database::getStudentSubmission(int assignmentId, int studentId)
 {
     QVariantMap submission;
+    QSqlQuery query;
 
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return submission;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT
-            asub.content,
-            asub.submit_time,
-            asub.score,
-            asub.feedback,
-            asub.grade_time,
-            asub.status,
-            ca.title as assignment_title,
-            ca.max_score
-        FROM assignment_submissions asub
-        JOIN course_assignments ca ON asub.assignment_id = ca.assignment_id
-        WHERE asub.assignment_id = ? AND asub.student_id = ?
-    )");
-
+    query.prepare("SELECT content, submit_time, score, feedback, grade_time, status "
+                  "FROM assignment_submissions "
+                  "WHERE assignment_id = ? AND student_id = ?");
     query.addBindValue(assignmentId);
     query.addBindValue(studentId);
 
-    if (!query.exec() || !query.next()) {
-        qDebug() << "获取作业提交详情失败";
-        return submission;
+    if (query.exec() && query.next()) {
+        submission["content"] = query.value("content").toString();
+        submission["submit_time"] = query.value("submit_time").toDateTime();
+        submission["score"] = query.value("score").isNull() ? QVariant() : query.value("score").toDouble();
+        submission["feedback"] = query.value("feedback").toString();
+        submission["grade_time"] = query.value("grade_time").toDateTime();
+        submission["status"] = query.value("status").toString();
+    } else {
+        qDebug() << "获取学生作业提交详情失败:" << query.lastError().text();
     }
-
-    submission["content"] = query.value("content").toString();
-    submission["submit_time"] = query.value("submit_time").toDateTime();
-    submission["score"] = query.value("score").toDouble();
-    submission["feedback"] = query.value("feedback").toString();
-    submission["grade_time"] = query.value("grade_time").toDateTime();
-    submission["status"] = query.value("status").toString();
-    submission["assignment_title"] = query.value("assignment_title").toString();
-    submission["max_score"] = query.value("max_score").toInt();
 
     return submission;
 }
 
-bool Database::canSubmitAssignment(int assignmentId, int studentId)
+bool Database::hasSubmittedAssignment(int assignmentId, int studentId)
 {
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return false;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT ca.deadline, ca.status
-        FROM course_assignments ca
-        JOIN courses c ON ca.course_id = c.course_id
-        JOIN student_courses sc ON c.course_id = sc.course_id
-        WHERE ca.assignment_id = ? AND sc.student_id = ? AND sc.enrollment_status = '已通过'
-    )");
-
+    QSqlQuery query;
+    query.prepare("SELECT 1 FROM assignment_submissions WHERE assignment_id = ? AND student_id = ?");
     query.addBindValue(assignmentId);
     query.addBindValue(studentId);
 
-    if (!query.exec() || !query.next()) {
-        qDebug() << "学生未选择该课程或作业不存在";
-        return false;
-    }
-
-    QDateTime deadline = query.value("deadline").toDateTime();
-    QString status = query.value("status").toString();
-
-    // 检查是否未截止且状态为开放提交
-    return (QDateTime::currentDateTime() <= deadline && status == "开放提交");
+    return query.exec() && query.next();
 }
 
-QVariantMap Database::getAssignmentStats(int assignmentId)
-{
-    QVariantMap stats;
-
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return stats;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT
-            COUNT(sc.student_id) as total_students,
-            COUNT(asub.student_id) as submitted_count,
-            COUNT(CASE WHEN asub.status = '已批改' THEN 1 END) as graded_count,
-            AVG(CASE WHEN asub.status = '已批改' THEN asub.score END) as average_score,
-            ca.max_score
-        FROM course_assignments ca
-        JOIN courses c ON ca.course_id = c.course_id
-        JOIN student_courses sc ON c.course_id = sc.course_id AND sc.enrollment_status = '已通过'
-        LEFT JOIN assignment_submissions asub ON ca.assignment_id = asub.assignment_id
-            AND sc.student_id = asub.student_id
-        WHERE ca.assignment_id = ?
-        GROUP BY ca.assignment_id, ca.max_score
-    )");
-
-    query.addBindValue(assignmentId);
-
-    if (!query.exec() || !query.next()) {
-        qDebug() << "获取作业统计失败：" << query.lastError().text();
-        return stats;
-    }
-
-    stats["total_students"] = query.value("total_students").toInt();
-    stats["submitted_count"] = query.value("submitted_count").toInt();
-    stats["graded_count"] = query.value("graded_count").toInt();
-    stats["average_score"] = query.value("average_score").toDouble();
-    stats["max_score"] = query.value("max_score").toInt();
-
-    return stats;
-}
-
-bool Database::canManageAssignments(int teacherId, int courseId)
-{
-    if (!db.isOpen()) {
-        qDebug() << "数据库未连接";
-        return false;
-    }
-
-    QSqlQuery query(db);
-    query.prepare("SELECT teacher_id FROM courses WHERE course_id = ?");
-    query.addBindValue(courseId);
-
-    if (!query.exec() || !query.next()) {
-        qDebug() << "课程不存在";
-        return false;
-    }
-
-    int courseTeacherId = query.value("teacher_id").toInt();
-    return (courseTeacherId == teacherId);
-}
-
+// 权限验证相关方法
 bool Database::isTeacherCourseAdmin(int teacherId)
 {
-    QSqlQuery query(db);
+    QSqlQuery query;
     query.prepare("SELECT is_course_admin FROM teachers WHERE teacher_id = ?");
     query.addBindValue(teacherId);
 
     if (query.exec() && query.next()) {
-        return query.value(0).toBool();
+        bool isAdmin = query.value("is_course_admin").toBool();
+        qDebug() << "教师" << teacherId << "选课管理员权限:" << (isAdmin ? "是" : "否");
+        return isAdmin;
+    } else {
+        qDebug() << "检查选课管理员权限失败:" << query.lastError().text();
+        return false;
+    }
+}
+
+bool Database::canManageCourse(int teacherId, int courseId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT 1 FROM courses WHERE course_id = ? AND teacher_id = ?");
+    query.addBindValue(courseId);
+    query.addBindValue(teacherId);
+
+    return query.exec() && query.next();
+}
+
+bool Database::isStudentEnrolled(int studentId, int courseId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT 1 FROM student_courses WHERE student_id = ? AND course_id = ? AND enrollment_status = '已通过'");
+    query.addBindValue(studentId);
+    query.addBindValue(courseId);
+
+    return query.exec() && query.next();
+}
+
+
+// 获取作业的最大分数（为批改界面使用）
+int Database::getAssignmentMaxScore(int assignmentId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT max_score FROM course_assignments WHERE assignment_id = ?");
+    query.addBindValue(assignmentId);
+
+    if (query.exec() && query.next()) {
+        return query.value("max_score").toInt();
+    } else {
+        qDebug() << "获取作业最大分数失败:" << query.lastError().text();
+        return 100; // 默认返回100分
+    }
+}
+
+// 获取作业标题（为批改界面使用）
+QString Database::getAssignmentTitle(int assignmentId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT title FROM course_assignments WHERE assignment_id = ?");
+    query.addBindValue(assignmentId);
+
+    if (query.exec() && query.next()) {
+        return query.value("title").toString();
+    } else {
+        qDebug() << "获取作业标题失败:" << query.lastError().text();
+        return "未知作业";
+    }
+}
+
+// 检查教师是否有权限批改此作业
+bool Database::canTeacherGradeAssignment(int teacherId, int assignmentId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT ca.assignment_id FROM course_assignments ca "
+                  "JOIN courses c ON ca.course_id = c.course_id "
+                  "WHERE ca.assignment_id = ? AND c.teacher_id = ?");
+    query.addBindValue(assignmentId);
+    query.addBindValue(teacherId);
+
+    return query.exec() && query.next();
+}
+
+// 获取作业统计信息（提交数量、批改数量等）
+QVariantMap Database::getAssignmentStats(int assignmentId)
+{
+    QVariantMap stats;
+
+    // 获取作业基本信息
+    QSqlQuery assignmentQuery;
+    assignmentQuery.prepare("SELECT ca.title, ca.max_score, c.course_name, "
+                            "COUNT(sc.student_id) as enrolled_students "
+                            "FROM course_assignments ca "
+                            "JOIN courses c ON ca.course_id = c.course_id "
+                            "JOIN student_courses sc ON c.course_id = sc.course_id "
+                            "WHERE ca.assignment_id = ? AND sc.enrollment_status = '已通过' "
+                            "GROUP BY ca.assignment_id, ca.title, ca.max_score, c.course_name");
+    assignmentQuery.addBindValue(assignmentId);
+
+    if (assignmentQuery.exec() && assignmentQuery.next()) {
+        stats["title"] = assignmentQuery.value("title").toString();
+        stats["max_score"] = assignmentQuery.value("max_score").toInt();
+        stats["course_name"] = assignmentQuery.value("course_name").toString();
+        stats["enrolled_students"] = assignmentQuery.value("enrolled_students").toInt();
     }
 
-    qDebug() << "检查选课管理员权限失败:" << query.lastError().text();
-    return false;
+    // 获取提交统计
+    QSqlQuery submissionQuery;
+    submissionQuery.prepare("SELECT "
+                            "COUNT(*) as total_submissions, "
+                            "COUNT(CASE WHEN status = '已批改' THEN 1 END) as graded_submissions, "
+                            "COUNT(CASE WHEN status = '已提交' THEN 1 END) as pending_submissions, "
+                            "COUNT(CASE WHEN status = '逾期提交' THEN 1 END) as overdue_submissions, "
+                            "AVG(CASE WHEN score IS NOT NULL THEN score END) as average_score "
+                            "FROM assignment_submissions "
+                            "WHERE assignment_id = ?");
+    submissionQuery.addBindValue(assignmentId);
+
+    if (submissionQuery.exec() && submissionQuery.next()) {
+        stats["total_submissions"] = submissionQuery.value("total_submissions").toInt();
+        stats["graded_submissions"] = submissionQuery.value("graded_submissions").toInt();
+        stats["pending_submissions"] = submissionQuery.value("pending_submissions").toInt();
+        stats["overdue_submissions"] = submissionQuery.value("overdue_submissions").toInt();
+
+        QVariant avgScore = submissionQuery.value("average_score");
+        stats["average_score"] = avgScore.isNull() ? 0.0 : avgScore.toDouble();
+    }
+
+    return stats;
+}
+
+QList<QVariantMap> Database::getCourseMembers(int courseId)
+{
+    QList<QVariantMap> members;
+    QSqlQuery query;
+
+    query.prepare("SELECT s.student_id, s.name, s.grade, s.college, "
+                  "sc.enrollment_status, sc.enrollment_time "
+                  "FROM students s "
+                  "JOIN student_courses sc ON s.student_id = sc.student_id "
+                  "WHERE sc.course_id = ? "
+                  "ORDER BY sc.enrollment_time ASC");
+    query.addBindValue(courseId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            QVariantMap member;
+            member["student_id"] = query.value("student_id").toInt();
+            member["name"] = query.value("name").toString();
+            member["grade"] = query.value("grade").toString();
+            member["college"] = query.value("college").toString();
+            member["enrollment_status"] = query.value("enrollment_status").toString();
+            member["enrollment_time"] = query.value("enrollment_time").toDateTime();
+            members.append(member);
+        }
+    } else {
+        qDebug() << "获取课程成员失败:" << query.lastError().text();
+    }
+
+    return members;
+}
+
+QVariantMap Database::getCourseExtendedInfo(int courseId)
+{
+    QVariantMap courseInfo;
+    QSqlQuery query;
+
+    query.prepare("SELECT c.course_id, c.course_name, c.college, c.description, "
+                  "c.credits, c.course_hours, c.semester, c.max_students, c.status, "
+                  "t.name as teacher_name, t.teacher_id, "
+                  "COUNT(sc.student_id) as student_count "
+                  "FROM courses c "
+                  "JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "LEFT JOIN student_courses sc ON c.course_id = sc.course_id "
+                  "    AND sc.enrollment_status = '已通过' "
+                  "WHERE c.course_id = ? "
+                  "GROUP BY c.course_id");
+    query.addBindValue(courseId);
+
+    if (query.exec() && query.next()) {
+        courseInfo["course_id"] = query.value("course_id").toInt();
+        courseInfo["course_name"] = query.value("course_name").toString();
+        courseInfo["college"] = query.value("college").toString();
+        courseInfo["description"] = query.value("description").toString();
+        courseInfo["credits"] = query.value("credits").toInt();
+        courseInfo["course_hours"] = query.value("course_hours").toInt();
+        courseInfo["semester"] = query.value("semester").toString();
+        courseInfo["max_students"] = query.value("max_students").toInt();
+        courseInfo["status"] = query.value("status").toString();
+        courseInfo["teacher_name"] = query.value("teacher_name").toString();
+        courseInfo["teacher_id"] = query.value("teacher_id").toInt();
+        courseInfo["student_count"] = query.value("student_count").toInt();
+    } else {
+        qDebug() << "获取课程扩展信息失败:" << query.lastError().text();
+    }
+
+    return courseInfo;
+}
+
+bool Database::updateCourseInfo(int courseId, const QString &courseName,
+                                const QString &description, int credits,
+                                int courseHours, const QString &semester,
+                                int maxStudents, const QString &status)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE courses SET "
+                  "course_name = ?, description = ?, credits = ?, "
+                  "course_hours = ?, semester = ?, max_students = ?, status = ? "
+                  "WHERE course_id = ?");
+    query.addBindValue(courseName);
+    query.addBindValue(description);
+    query.addBindValue(credits);
+    query.addBindValue(courseHours);
+    query.addBindValue(semester);
+    query.addBindValue(maxStudents);
+    query.addBindValue(status);
+    query.addBindValue(courseId);
+
+    if (query.exec() && query.numRowsAffected() > 0) {
+        qDebug() << "课程信息更新成功";
+        return true;
+    } else {
+        qDebug() << "更新课程信息失败:" << query.lastError().text();
+        return false;
+    }
+}
+
+QVariantMap Database::getCourseStats(int courseId)
+{
+    QVariantMap stats;
+
+    // 获取基本统计信息
+    QSqlQuery query;
+    query.prepare("SELECT "
+                  "COUNT(CASE WHEN sc.enrollment_status = '已通过' THEN 1 END) as enrolled_count, "
+                  "COUNT(CASE WHEN sc.enrollment_status = '申请中' THEN 1 END) as pending_count, "
+                  "c.max_students "
+                  "FROM courses c "
+                  "LEFT JOIN student_courses sc ON c.course_id = sc.course_id "
+                  "WHERE c.course_id = ? "
+                  "GROUP BY c.course_id, c.max_students");
+    query.addBindValue(courseId);
+
+    if (query.exec() && query.next()) {
+        int enrolledCount = query.value("enrolled_count").toInt();
+        int pendingCount = query.value("pending_count").toInt();
+        int maxStudents = query.value("max_students").toInt();
+
+        stats["enrolled_count"] = enrolledCount;
+        stats["pending_count"] = pendingCount;
+        stats["max_students"] = maxStudents;
+        stats["available_slots"] = maxStudents - enrolledCount;
+        stats["enrollment_rate"] = maxStudents > 0 ?
+                                       (double)enrolledCount / maxStudents * 100 : 0.0;
+    }
+
+    // 获取作业和考试统计
+    QSqlQuery assignmentQuery;
+    assignmentQuery.prepare("SELECT COUNT(*) as assignment_count "
+                            "FROM course_assignments WHERE course_id = ?");
+    assignmentQuery.addBindValue(courseId);
+
+    if (assignmentQuery.exec() && assignmentQuery.next()) {
+        stats["assignment_count"] = assignmentQuery.value("assignment_count").toInt();
+    }
+
+    QSqlQuery examQuery;
+    examQuery.prepare("SELECT COUNT(*) as exam_count "
+                      "FROM exams WHERE course_id = ?");
+    examQuery.addBindValue(courseId);
+
+    if (examQuery.exec() && examQuery.next()) {
+        stats["exam_count"] = examQuery.value("exam_count").toInt();
+    }
+
+    // 获取通知统计
+    QSqlQuery noticeQuery;
+    noticeQuery.prepare("SELECT COUNT(*) as notice_count "
+                        "FROM course_notices WHERE course_id = ?");
+    noticeQuery.addBindValue(courseId);
+
+    if (noticeQuery.exec() && noticeQuery.next()) {
+        stats["notice_count"] = noticeQuery.value("notice_count").toInt();
+    }
+
+    return stats;
+}
+
+
+// 在getTeacherCourses方法中增加课程扩展信息的查询
+QList<Course> Database::getTeacherCourses(int teacherId)
+{
+    QList<Course> courses;
+    QSqlQuery query;
+
+    // 修改查询以包含扩展信息和学生数量统计
+    query.prepare("SELECT c.course_id, c.teacher_id, c.course_name, c.college, c.description, "
+                  "c.credits, c.course_hours, c.semester, c.max_students, c.status, "
+                  "t.name as teacher_name, "
+                  "COUNT(sc.student_id) as student_count "
+                  "FROM courses c "
+                  "JOIN teachers t ON c.teacher_id = t.teacher_id "
+                  "LEFT JOIN student_courses sc ON c.course_id = sc.course_id "
+                  "    AND sc.enrollment_status = '已通过' "
+                  "WHERE c.teacher_id = ? "
+                  "GROUP BY c.course_id "
+                  "ORDER BY c.course_name");
+    query.addBindValue(teacherId);
+
+
+    if (query.exec()) {
+        while (query.next()) {
+            Course course;
+            course.setCourseId(   query.value("course_id").toInt());
+            course.setTeacherId(  query.value("teacher_id").toInt());
+            course.setCollege(    query.value("college").toString());
+            course.setCourseName( query.value("course_name").toString());
+            course.setTeacherName(query.value("teacher_name").toString());
+
+            // —— 新增 ——
+            course.setDescription( query.value("description").toString());
+            course.setCredits(     query.value("credits").toInt());
+            course.setCourseHours( query.value("course_hours").toInt());
+            course.setSemester(    query.value("semester").toString());
+            course.setMaxStudents( query.value("max_students").toInt());
+            course.setStatus(      query.value("status").toString());
+            course.setStudentCount(query.value("student_count").toInt());
+
+            courses.append(course);
+        }
+    } else {
+        qDebug() << "获取教师课程失败:" << query.lastError().text();
+    }
+
+    return courses;
 }

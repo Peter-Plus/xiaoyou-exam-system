@@ -1,0 +1,14 @@
+二代阶段7日志 - 错误修复总结
+日期：2025-07-01
+
+1. 课程页面导航野指针崩溃
+问题描述：教师端点击“课程通知”或“课程作业”时，由于导航按钮指针未在构造函数中初始化，导致野指针访问而程序崩溃。
+解决方案：在 coursepage.cpp 构造函数初始化列表中，将 m_enrollmentBtn、m_noticesBtn、m_assignmentsBtn、m_enrollmentAdminBtn 显式初始化为 nullptr，并在 setupNavigation() 中根据角色分支创建对应按钮，避免野指针访问。
+
+2. 学生端考试参与野指针崩溃
+问题描述：学生端点击“开始考试”后，ExamTaking 模块中 answerInputWidget 指针未初始化，误认为存在旧控件而调用 delete 导致崩溃。
+解决方案：在 examtaking.cpp 构造函数初始化列表中，将 answerInputWidget 及相关 UI 指针显式初始化为 nullptr，确保首次创建控件时不执行删除逻辑。
+
+3. 学生端退出登录崩溃
+问题描述：学生端 onLogoutClicked() 中，退出信号发出后调用 this->close() 导致在主窗口被 AppController 删除后再次访问已释放内存而崩溃。
+解决方案：在 studentmainwindow.cpp 的 onLogoutClicked() 中移除 this->close() 调用，让 AppController 统一处理主窗口的关闭与销毁。

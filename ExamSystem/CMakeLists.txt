@@ -28,7 +28,7 @@ include_directories(src/ui/social)
 include_directories(src/utils)
 
 set(PROJECT_SOURCES
-    # 主程序文件
+            # 主程序文件
             main.cpp
 
             # 核心模块
@@ -143,34 +143,38 @@ set(PROJECT_SOURCES
             src/ui/chat/invitememberdialog.h
             src/ui/chat/invitememberdialog.cpp
 
-            # 2.0版本 - 课程管理
+            #课程管理模块
+            src/models/coursenotice.h
+            src/models/coursenotice.cpp
+            src/models/courseassignment.h
+            src/models/courseassignment.cpp
+            src/models/assignmentsubmission.h
+            src/models/assignmentsubmission.cpp
+            src/models/enrollmentrequest.h
+            src/models/erollmentrequest.cpp
             src/ui/course/coursepage.h
             src/ui/course/coursepage.cpp
             src/ui/course/enrollmentwidget.h
             src/ui/course/enrollmentwidget.cpp
-            src/ui/course/noticewidget.h
-            src/ui/course/noticewidget.cpp
-            src/ui/course/assignmentwidget.h
-            src/ui/course/assignmentwidget.cpp
-            src/models/coursenotice.h
-            src/models/coursenotice.cpp
-            src/models/assignment.h
-            src/models/assignment.cpp
-            src/models/enrollmentrequest.h
-            src/models/enrollmentrequest.cpp
-            src/models/submission.h
-            src/models/submission.cpp
-
-
+            src/ui/course/enrollmentadminwidget.h
+            src/ui/course/enrollmentadminwidget.cpp
+            src/ui/course/coursenoticewidget.h
+            src/ui/course/coursenoticewidget.cpp
+            src/ui/course/courseassignmentwidget.h
+            src/ui/course/courseassignmentwidget.cpp
 )
+
+# Windows资源文件（移到外面）
+if(WIN32)
+    set(PROJECT_SOURCES ${PROJECT_SOURCES} app.rc)
+endif()
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(ExamSystem
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
-
-
-
+        src/ui/course/mycourseswidget.h
+        src/ui/course/mycourseswidget.cpp
     )
 else()
     if(ANDROID)

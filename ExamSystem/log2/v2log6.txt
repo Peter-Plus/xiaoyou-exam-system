@@ -1,0 +1,206 @@
+# 在线考试系统2.0版本 - 阶段6开发工作日志
+
+## 1. 开发目标
+
+完成课程管理系统开发，实现选课申请审核、课程通知发布、作业管理功能，集成到主界面课程标签页。
+
+## 2. 开发步骤与成果
+
+### 第一步：扩展Database类的课程管理方法 ✅
+
+**新增方法总计：23个**
+
+#### 选课管理（5个方法）
+- `applyForCourse(int studentId, int courseId)` - 学生申请选课
+- `approveEnrollment(int studentId, int courseId)` - 选课管理员审核通过
+- `rejectEnrollment(int studentId, int courseId)` - 选课管理员拒绝申请
+- `getPendingEnrollments()` - 获取待审核选课申请
+- `getStudentCourses(int studentId)` - 获取学生选课列表
+
+#### 课程通知管理（4个方法）
+- `publishCourseNotice(int courseId, title, content, isPinned)` - 发布课程通知
+- `updateCourseNotice(int noticeId, title, content, isPinned)` - 更新通知
+- `deleteCourseNotice(int noticeId)` - 删除通知
+- `getCourseNotices(int courseId)` - 获取课程通知列表
+
+#### 作业管理（6个方法）
+- `publishAssignment(courseId, title, description, deadline, maxScore)` - 发布作业
+- `updateAssignment(assignmentId, title, description, deadline, maxScore)` - 更新作业
+- `closeAssignment(int assignmentId)` - 关闭作业提交
+- `getCourseAssignments(int courseId)` - 获取课程作业列表
+- `getStudentAssignments(int studentId)` - 获取学生作业列表
+- `deleteAssignment(int assignmentId)` - 删除作业
+
+#### 作业提交管理（5个方法）
+- `submitAssignment(assignmentId, studentId, content)` - 学生提交作业
+- `gradeAssignment(assignmentId, studentId, score, feedback)` - 教师批改作业
+- `getAssignmentSubmissions(int assignmentId)` - 获取作业提交列表
+- `getStudentSubmission(assignmentId, studentId)` - 获取学生提交详情
+- `hasSubmittedAssignment(assignmentId, studentId)` - 检查是否已提交
+
+#### 权限验证（3个方法）
+- `isTeacherCourseAdmin(int teacherId)` - 检查是否为选课管理员
+- `canManageCourse(int teacherId, int courseId)` - 检查课程管理权限
+- `isStudentEnrolled(int studentId, int courseId)` - 检查学生是否已选课
+
+### 第二步：创建课程管理数据模型类 ✅
+
+**新增模型类：4个**
+
+#### CourseNotice（课程通知类）
+- **属性**：noticeId, courseId, title, content, publishTime, isPinned
+- **方法**：getContentPreview(), getTimeString(), getPinnedStatusText(), isValid()
+
+#### CourseAssignment（课程作业类）
+- **属性**：assignmentId, courseId, title, description, publishTime, deadline, maxScore, status
+- **枚举**：AssignmentStatus { OPEN, CLOSED }
+- **方法**：getStatusText(), getDeadlineString(), isOverdue(), canSubmit()
+
+#### AssignmentSubmission（作业提交类）
+- **属性**：assignmentId, studentId, content, submitTime, score, feedback, gradeTime, status
+- **枚举**：SubmissionStatus { SUBMITTED, GRADED, OVERDUE }
+- **方法**：getStatusText(), getSubmitTimeString(), isGraded(), hasScore()
+
+#### EnrollmentRequest（选课申请类）
+- **属性**：studentId, courseId, status, enrollmentTime, studentName, courseName
+- **枚举**：EnrollmentStatus { PENDING, APPROVED }
+- **方法**：getStatusText(), getStudentInfo(), getCourseInfo()
+
+### 第三步：开发选课管理组件 ✅
+
+#### CoursePage（课程管理主页面）
+- **布局**：QQ风格左右分栏布局
+- **权限检查**：自动识别学生、教师、选课管理员角色
+- **导航功能**：选课申请、课程通知、课程作业、选课审核
+
+#### EnrollmentWidget（选课申请组件）
+- **学生端专用**：双标签页设计（可选课程 + 我的选课）
+- **搜索功能**：按学院筛选、关键词搜索、延迟搜索
+- **申请流程**：一键申请、确认对话框、状态反馈
+
+#### EnrollmentAdminWidget（选课审核组件）
+- **选课管理员专用**：表格化展示申请信息
+- **批量操作**：全选、批量通过、批量拒绝
+- **多维度筛选**：按学院、状态、关键词筛选
+
+### 第四步：开发课程通知组件 ✅
+
+#### CourseNoticeWidget（课程通知主组件）
+- **双角色支持**：教师端发布/编辑/删除，学生端查看
+- **分栏布局**：左侧通知列表 + 右侧通知详情
+- **置顶功能**：支持置顶通知，优先显示
+- **智能筛选**：按课程筛选、关键词搜索
+
+#### NoticeDetailWidget（通知详情组件）
+- **详情展示**：标题、课程信息、发布时间、置顶状态
+- **内容显示**：完整通知内容，支持长文本
+
+#### PublishNoticeDialog（发布/编辑通知对话框）
+- **双模式**：发布新通知 / 编辑现有通知
+- **功能**：课程选择、置顶设置、预览功能、输入验证
+
+### 第五步：开发课程作业组件 ✅
+
+#### CourseAssignmentWidget（课程作业主组件）
+- **双角色支持**：教师端发布作业和查看提交，学生端查看作业和提交
+- **分栏布局**：左侧作业列表 + 右侧作业详情
+- **状态管理**：开放提交、已截止状态，过期和提交状态可视化
+
+#### AssignmentDetailWidget（作业详情组件）
+- **信息展示**：标题、课程、截止时间、满分、状态
+- **内容显示**：作业描述、提交内容、批改结果
+
+#### PublishAssignmentDialog（发布作业对话框）
+- **功能**：课程选择、作业设置、截止时间、满分设置
+
+#### SubmitAssignmentDialog（提交作业对话框）
+- **功能**：作业内容输入、确认机制、友好提示
+
+### 第六步：集成到主界面课程标签页 ✅
+
+#### 学生端集成
+- **导航**：我的选课、课程通知、课程作业
+- **统计信息**：已选课程数量、申请中数量
+
+#### 教师端集成
+- **导航**：课程通知、课程作业
+- **选课管理员专用**：选课审核功能
+
+#### 信号槽连接
+- `enrollmentSubmitted(int courseId)`
+- `noticePublished(int courseId)`
+- `assignmentPublished(int courseId)`
+
+### 第七步：解决编译问题 ✅
+
+#### 修复链接错误
+- **问题**：EnrollmentWidget缺少`showAvailableCourses()`和`showMyCourses()`方法实现
+- **解决方案**：添加缺失方法实现
+- **清理**：移除未使用的`enrollmentrequest.h`头文件包含
+
+## 3. 使用的数据库表
+
+### 现有表扩展
+- **student_courses**：选课申请状态管理
+- **teachers**：is_course_admin字段（选课管理员标识）
+
+### 2.0新增表
+- **course_notices**：课程通知管理
+- **course_assignments**：作业管理  
+- **assignment_submissions**：作业提交管理
+
+## 4. 核心业务流程
+
+### 选课流程
+1. 学生申请选课 → 2. 选课管理员审核 → 3. 通过/拒绝
+
+### 通知流程
+1. 教师发布通知 → 2. 学生查看通知 → 3. 教师编辑/删除
+
+### 作业流程
+1. 教师发布作业 → 2. 学生提交作业 → 3. 教师查看提交
+
+## 5. 文件清单
+
+### 新增文件
+- `src/models/coursenotice.h/cpp`
+- `src/models/courseassignment.h/cpp`
+- `src/models/assignmentsubmission.h/cpp`
+- `src/models/enrollmentrequest.h/cpp`
+- `src/ui/course/coursepage.h/cpp`
+- `src/ui/course/enrollmentwidget.h/cpp`
+- `src/ui/course/enrollmentadminwidget.h/cpp`
+- `src/ui/course/coursenoticewidget.h/cpp`
+- `src/ui/course/courseassignmentwidget.h/cpp`
+
+### 修改文件
+- `src/core/database.h/cpp` - 扩展23个课程管理方法
+- `src/ui/main/studentmainwindow.h/cpp` - 集成课程页面
+- `src/ui/main/teachermainwindow.h/cpp` - 集成课程页面
+
+## 6. 阶段6总结
+
+**开发成果**：
+- ✅ 完成23个数据库方法扩展
+- ✅ 创建4个数据模型类
+- ✅ 开发9个界面组件
+- ✅ 实现选课申请审核完整流程
+- ✅ 实现课程通知发布查看功能
+- ✅ 实现课程作业发布提交功能
+- ✅ 成功集成到主界面导航系统
+
+**技术特点**：
+- 基于Qt Widgets的现代化界面设计
+- 完善的权限管理和角色分离
+- 事务安全的数据库操作
+- 响应式布局和用户体验优化
+
+**业务价值**：
+- 完整的课程管理生态系统
+- 支持选课申请和审核自动化
+- 课程信息发布和学生交流平台
+- 作业管理和提交评估体系
+
+---
+
+**阶段6开发圆满完成**，课程管理系统已成为2.0版本的核心功能模块，与好友管理、聊天系统形成完整的教育管理平台。

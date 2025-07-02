@@ -4,6 +4,8 @@
 #include <QTimer>
 #include <QRegularExpression>
 
+const int MessageBubbleWidget::MIN_BUBBLE_WIDTH;
+
 MessageBubbleWidget::MessageBubbleWidget(const MessageInfo &message, QWidget *parent)
     : QWidget(parent)
     , m_message(message)

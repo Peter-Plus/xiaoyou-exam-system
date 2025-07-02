@@ -1,0 +1,62 @@
+### 通俗易懂的Bug描述
+
+在教师端切换到“课程通知”或“课程作业”时，程序会立刻崩溃，这是因为导航按钮（如“选课”、“通知”、“作业”按钮）的指针在构造函数中没有被初始化，导致在代码中判断或操作这些按钮时访问到了野指针。
+
+---
+
+## Bug 记录文档
+
+**Bug 编号**：BUG-20250701-CPN-001
+**模块**：课程页面导航（CoursePage）
+**发现版本**：v2.0.6
+**发现日期**：2025-07-01
+**严重程度**：高（会造成程序崩溃）
+
+### 1. 问题概述
+
+教师角色点击“课程通知”或“课程作业”按钮后，程序立即闪退，且终端无任何错误输出。
+
+### 2. 环境信息
+
+* 操作系统：Windows 10
+* Qt 版本：5.15.2
+* 编译工具：MSVC 2019
+* 应用版本：v2.0.6
+
+### 3. 重现步骤
+
+1. 使用教师账号登录应用
+2. 点击主界面左侧导航中的“课程通知”按钮或“课程作业”按钮
+3. 程序立刻崩溃并退出
+
+### 4. 根本原因
+
+在 `CoursePage` 的构造函数初始化列表中，导航按钮指针（`m_enrollmentBtn`, `m_noticesBtn`, `m_assignmentsBtn`, `m_enrollmentAdminBtn`）未被显式初始化，保持了未定义的野指针状态；后续在 `showNotices()` 和 `showAssignments()` 中对这些按钮执行 `setChecked(false)` 或其他操作时，触发野指针访问导致崩溃。
+
+### 5. 解决方案
+
+1. 在 `CoursePage` 构造函数初始化列表中，显式将所有导航按钮成员变量初始化为 `nullptr`。
+2. 在 `setupNavigation()` 中，根据角色分支分别创建相应的按钮。
+3. 后续操作前，使用 `if (m_button)` 判断指针有效性，或统一走已创建的逻辑分支。
+
+```diff
+--- a/coursepage.cpp
++++ b/coursepage.cpp
+@@ CoursePage::CoursePage(...)
+-    , m_assignmentCount(0)
++    , m_assignmentCount(0)
++    , m_enrollmentBtn(nullptr)
++    , m_noticesBtn(nullptr)
++    , m_assignmentsBtn(nullptr)
++    , m_enrollmentAdminBtn(nullptr)
+{}
+```
+
+### 6. 验证结果
+
+* 教师端点击“课程通知”和“课程作业”不再崩溃
+* 学生端功能 unaffected，导航按钮创建和逻辑正确
+
+### 7. 备注
+
+建议后续在代码中统一使用智能指针或在 UI 控件管理中避免裸指针，以进一步提高代码健壮性。

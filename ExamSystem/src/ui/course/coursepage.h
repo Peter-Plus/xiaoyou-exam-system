@@ -5,124 +5,110 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QSplitter>
-#include <QListWidget>
 #include <QStackedWidget>
-#include <QLabel>
+#include <QListWidget>
 #include <QPushButton>
-#include <QGroupBox>
+#include <QLabel>
 #include <QTimer>
-#include <QSqlQuery>
+#include <QGroupBox>
+
 #include "../../core/database.h"
-#include "enrollmentwidget.h"
-#include "noticewidget.h"
-#include "assignmentwidget.h"
+
+// 前向声明
+class EnrollmentWidget;     // 选课申请组件
+class EnrollmentAdminWidget; // 选课审核组件
+class CourseNoticeWidget;   // 课程通知组件
+class CourseAssignmentWidget; // 课程作业组件
+class MyCoursesWidget;
 
 class CoursePage : public QWidget
 {
     Q_OBJECT
 
 public:
-    enum UserType {
-        STUDENT = 0,
-        TEACHER = 1
-    };
-
-    enum PageType {
-        PAGE_MY_COURSES = 0,     // 我的课程
-        PAGE_ENROLLMENT = 1,     // 选课申请/选课审核
-        PAGE_COURSE_DETAIL = 2   // 课程详情（通知、作业）
-    };
-
-    enum SubPageType {
-        SUBPAGE_NOTICE = 0,
-        SUBPAGE_ASSIGNMENT = 1
-    };
-
-    CoursePage(Database *database, int userId, UserType userType, QWidget *parent = nullptr);
+    explicit CoursePage(Database *database, int userId, const QString &userType, QWidget *parent = nullptr);
     ~CoursePage();
 
-    // 页面切换方法
-    void switchToSubPage(SubPageType subPage);
-    void showNotices();
-    void showAssignments();
-    void showEnrollment();
+    // 公共方法
+    void refreshAll();
 
 public slots:
-    void refreshData();
-    void onCourseSelected(int courseId);
-    void onPageChanged(int pageIndex);
+    void showEnrollment();      // 显示选课申请页面
+    void showNotices();         // 显示课程通知页面
+    void showAssignments();     // 显示课程作业页面
+    void showEnrollmentAdmin(); // 显示选课审核页面（仅选课管理员）
 
 signals:
-    void courseEnrolled(int courseId);
-    void enrollmentProcessed(int studentId, int courseId, bool approved);
-    void noticePublished(int courseId, const QString &title);
-    void assignmentPublished(int courseId, const QString &title);
+    void enrollmentSubmitted(int courseId);
+    void noticePublished(int courseId);
+    void assignmentPublished(int courseId);
+    void courseUpdated(int courseId);     // 课程信息更新信号
 
 private slots:
+    void onNavigationClicked();
     void autoRefresh();
-    void onCourseListItemClicked();
-    void onNavigationItemClicked();
+    void updateStatistics();
+    void showMyCourses();         // 显示我的课程页面
 
 private:
+    enum PageIndex {
+        PAGE_MY_COURSES = 0,
+        PAGE_ENROLLMENT = 0,    // 仅学生端
+        PAGE_NOTICES = 0,       // 教师端从0开始
+        PAGE_ASSIGNMENTS = 1,   // 根据用户类型调整
+        PAGE_ENROLLMENT_ADMIN = 2  // 仅选课管理员
+    };
     void setupUI();
-    void setupStudentUI();
-    void setupTeacherUI();
-    void createNavigationPanel();
-    void createContentArea();
-    void createEnrollmentPage();
-    void createNoticePage();
-    void createAssignmentPage();
-    void loadCourseList();
-    void updateStatistics();
-    void showPlaceholderPage(const QString &message);
+    void setupNavigation();
+    void setupContentPages();
+    void setupStyles();
+    void updateNavigationBadges();
+    void checkUserPermissions();
 
-    // UI组件
+    // 成员变量
+    Database *m_database;
+    int m_currentUserId;
+    QString m_currentUserType;
+    bool m_isCourseAdmin;       // 是否为选课管理员
+    bool m_isTeacher;           // 是否为教师
+    MyCoursesWidget *m_myCoursesWidget;
+    QPushButton *m_myCoursesBtn;
+
+    // UI组件 - 主布局
     QHBoxLayout *m_mainLayout;
     QSplitter *m_splitter;
 
-    // 左侧导航栏
+    // 左侧导航
     QWidget *m_navigationWidget;
     QVBoxLayout *m_navigationLayout;
-    QListWidget *m_navigationList;
-    QGroupBox *m_statisticsGroup;
-    QLabel *m_statisticsLabel;
-    QPushButton *m_refreshButton;
+    QPushButton *m_enrollmentBtn;
+    QPushButton *m_noticesBtn;
+    QPushButton *m_assignmentsBtn;
+    QPushButton *m_enrollmentAdminBtn;  // 选课审核按钮（仅管理员可见）
+    QGroupBox *m_statsGroupBox;
+    QLabel *m_statsLabel;
 
-    // 中间内容区域
-    QWidget *m_contentWidget;
-    QVBoxLayout *m_contentLayout;
+    // 右侧内容区域
     QStackedWidget *m_contentStack;
 
-    // 右侧详情区域
-    QWidget *m_detailWidget;
-    QVBoxLayout *m_detailLayout;
-    QStackedWidget *m_detailStack;
-
-    // 数据
-    Database *m_database;
-    int m_userId;
-    UserType m_userType;
-    int m_currentCourseId;
-    PageType m_currentPage;
-    SubPageType m_currentSubPage;
+    // 各功能页面
+    EnrollmentWidget *m_enrollmentWidget;
+    EnrollmentAdminWidget *m_enrollmentAdminWidget;
+    CourseNoticeWidget *m_courseNoticeWidget;
+    CourseAssignmentWidget *m_courseAssignmentWidget;
 
     // 定时器
     QTimer *m_refreshTimer;
 
-    // 课程列表数据
-    QList<QVariantMap> m_courseList;
-    QList<QVariantMap> m_enrollmentRequests;
-
-    // 统计数据
-    int m_totalCourses;
-    int m_pendingRequests;
-    int m_unreadNotices;
-    int m_pendingAssignments;
-
-    // 功能组件
-    EnrollmentWidget *m_enrollmentWidget;
-    NoticeWidget *m_noticeWidget;
-    AssignmentWidget *m_assignmentWidget;
+    // 统计信息
+    int m_enrolledCourseCount;      // 已选课程数量
+    int m_pendingEnrollmentCount;   // 待审核申请数量（仅管理员）
+    int m_unreadNoticeCount;        // 未读通知数量
+    int m_assignmentCount;          // 作业数量
+    // 添加辅助方法
+    int getNoticesPageIndex() const { return m_isTeacher ? 0 : 1; }
+    int getAssignmentsPageIndex() const { return m_isTeacher ? 1 : 2; }
+    int getEnrollmentAdminPageIndex() const { return 2; }
 };
 
 #endif // COURSEPAGE_H
