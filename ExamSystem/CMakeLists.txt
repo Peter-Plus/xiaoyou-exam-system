@@ -162,6 +162,8 @@ set(PROJECT_SOURCES
             src/ui/course/coursenoticewidget.cpp
             src/ui/course/courseassignmentwidget.h
             src/ui/course/courseassignmentwidget.cpp
+
+
 )
 
 # Windows资源文件（移到外面）
@@ -175,6 +177,10 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ${PROJECT_SOURCES}
         src/ui/course/mycourseswidget.h
         src/ui/course/mycourseswidget.cpp
+        src/utils/thememanager.h
+        src/utils/thememanager.cpp
+        src/utils/appstyle.h
+        src/utils/appstyle.cpp
     )
 else()
     if(ANDROID)

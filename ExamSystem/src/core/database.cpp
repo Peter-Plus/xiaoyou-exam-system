@@ -22,21 +22,21 @@ bool Database::connectToDatabase()
 
     bool connected = false;
     for (const QString &driverName : driverNames) {
-        // // 连接本地
-        // QString connectionString = QString("DRIVER={%1};"
-        //                                    "SERVER=localhost;"
-        //                                    "DATABASE=exam_system;"
-        //                                    "UID=root;"
-        //                                    "PWD=Zy202312138;"//    ====================记住改密码！！！！
-        //                                    "PORT=3306;").arg(driverName);
-        //连接服务器
+        // 连接本地
         QString connectionString = QString("DRIVER={%1};"
-                                           "SERVER=43.137.46.253;" //云服务器IP
+                                           "SERVER=localhost;"
                                            "DATABASE=exam_system;"
-                                           "UID=xiaoyou_user;"
-                                           "PWD=Zy202312138;"
-                                           "PORT=3306;"
-                                           "OPTION=3;").arg(driverName);
+                                           "UID=root;"
+                                           "PWD=Zy202312138;"//    ====================记住改密码！！！！
+                                           "PORT=3306;").arg(driverName);
+        // //连接服务器
+        // QString connectionString = QString("DRIVER={%1};"
+        //                                    "SERVER=43.137.46.253;" //云服务器IP
+        //                                    "DATABASE=exam_system;"
+        //                                    "UID=xiaoyou_user;"
+        //                                    "PWD=Zy202312138;"
+        //                                    "PORT=3306;"
+        //                                    "OPTION=3;").arg(driverName);
 
         db.setDatabaseName(connectionString);
 
