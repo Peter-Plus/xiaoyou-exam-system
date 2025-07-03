@@ -292,8 +292,8 @@ make -j4
 
 ## 📞 联系我们
 
-- **项目仓库**：[https://gitee.com/peterclaus/qt1](https://gitee.com/peterclaus/qt1)
-- **问题反馈**：[提交Issue](https://gitee.com/peterclaus/qt1/issues)
+- **项目仓库**：[https://git.com/peterclaus/qt1](https://gitee.com/peterclaus/qt1)
+- **问题反馈**：[提交Issue](https://git.com/peterclaus/qt1/issues)
 - **技术讨论**：欢迎在Issues中交流技术问题
 
 ---
